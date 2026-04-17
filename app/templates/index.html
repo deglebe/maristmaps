@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<p>Hello, world</p>
+{% if g.user %}
+<p>Signed in as {{ g.user.email }}.</p>
+{% endif %}
+{% endblock %}
