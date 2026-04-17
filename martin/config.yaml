@@ -1,0 +1,9 @@
+listen_addresses: "0.0.0.0:3000"
+keep_alive: 75
+worker_processes: 8
+cache_size_mb: 512
+
+postgres:
+  connection_string: "postgres://maristmaps:maristmaps@db:5432/maristmaps"
+  pool_size: 20
+  auto_bounds: quick
