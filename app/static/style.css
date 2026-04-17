@@ -1,0 +1,36 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 1rem;
+  line-height: 1.4;
+}
+header {
+  margin-bottom: 1rem;
+}
+header a,
+header span,
+header form {
+  margin-right: 0.75rem;
+}
+header .inline-form {
+  display: inline;
+}
+main {
+  max-width: 40rem;
+}
+form label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+form input {
+  margin-left: 0.25rem;
+}
+ul.flash {
+  list-style: square;
+  padding-left: 1.25rem;
+}
+.flash .error {
+  color: #b00;
+}
+.flash .ok {
+  color: #060;
+}
