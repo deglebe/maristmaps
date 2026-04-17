@@ -11,5 +11,19 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init-postgis.sql:/docker-entrypoint-initdb.d/01-init-postgis.sql
 
+  martin:
+    image: ghcr.io/maplibre/martin:1.5.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=${MARTIN_DATABASE_URL}
+      - PGPASSWORD=${PGPASSWORD}
+    volumes:
+      - ./martin:/config
+    depends_on:
+      - db
+    command: --config /config/config.yaml
+
 volumes:
   postgres_data:
