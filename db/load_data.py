@@ -80,6 +80,16 @@ for file in files:
             )
         print(f"Loaded {file}")
 
+#creat a spatial index, should let PostGIS go directly to nearby points
+# PostGIS does not need to scan every row (i think, a dude in a youtube video recommended ...)
+cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS LOC_IDX
+        ON  LOCATIONS
+        USING GIST (LOC);
+        """
+        )
+
 connection.commit()
 cursor.close()
 connection.close()
