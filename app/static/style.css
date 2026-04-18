@@ -383,6 +383,11 @@ body.map-view #map {
   word-break: break-word;
 }
 
+.maplibregl-popup-content table.attrs td.popup-addr {
+  white-space: pre-line;
+  line-height: 1.4;
+}
+
 /* Custom 3D / tilt toggle that sits with the nav controls. */
 .pitch-toggle button {
   width: 29px;

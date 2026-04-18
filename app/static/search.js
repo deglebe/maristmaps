@@ -35,6 +35,18 @@
     "River views, river moods…",
   ];
 
+  /**
+   * escapeHtml
+   *
+   * Purpose:
+   * Escape HTML special characters so untrusted text is safe in innerHTML.
+   *
+   * Args:
+   * s - Value (coerced to string) to escape.
+   *
+   * Returns:
+   * Escaped string safe to embed in HTML text nodes.
+   */
   function escapeHtml(s) {
     return String(s).replace(
       /[&<>"']/g,
@@ -49,6 +61,19 @@
     );
   }
 
+  /**
+   * highlight
+   *
+   * Purpose:
+   * Wrap the substring that matches the query in <strong> for the results list.
+   *
+   * Args:
+   * text - Original label text.
+   * q - Current search substring (case-insensitive match).
+   *
+   * Returns:
+   * HTML string (already entity-escaped except for inserted <strong> tags).
+   */
   function highlight(text, q) {
     if (!q) return escapeHtml(text);
     const lower = text.toLowerCase();
@@ -66,6 +91,18 @@
   let placesReady = false;
   let placesError = null;
 
+  /**
+   * loadPlaces
+   *
+   * Purpose:
+   * Fetch the full feature list from `/api/features` once for client-side search.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Promise that resolves when the fetch completes (updates PLACES / error state).
+   */
   async function loadPlaces() {
     try {
       const res = await fetch("/api/features", {
@@ -97,10 +134,34 @@
   // Split the query into whitespace tokens and require every token to
   // appear somewhere in the haystack. This lets "library cannavino" match
   // "James A. Cannavino Library" without caring about order.
+  /**
+   * tokenize
+   *
+   * Purpose:
+   * Split a query into lowercase tokens used for AND-style matching.
+   *
+   * Args:
+   * q - Raw search string.
+   *
+   * Returns:
+   * Array of non-empty lowercase tokens.
+   */
   function tokenize(q) {
     return q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   }
 
+  /**
+   * placeHaystack
+   *
+   * Purpose:
+   * Build a single lowercase string containing fields to match against tokens.
+   *
+   * Args:
+   * p - Feature object with name, subtitle, kind.
+   *
+   * Returns:
+   * Lowercase concatenated haystack string.
+   */
   function placeHaystack(p) {
     return (
       (p.name || "") +
@@ -112,6 +173,19 @@
   }
 
   // Score so exact / prefix matches on the title rise to the top.
+  /**
+   * scorePlace
+   *
+   * Purpose:
+   * Assign a numeric relevance score so better name matches sort earlier.
+   *
+   * Args:
+   * p - Feature to score.
+   * tokens - Token array from tokenize().
+   *
+   * Returns:
+   * Non-negative score, or -1 if any token is missing from the haystack.
+   */
   function scorePlace(p, tokens) {
     const name = (p.name || "").toLowerCase();
     let score = 0;
@@ -127,6 +201,18 @@
     return score;
   }
 
+  /**
+   * filterPlaces
+   *
+   * Purpose:
+   * Return the top matching features for the current query string.
+   *
+   * Args:
+   * q - Raw search string.
+   *
+   * Returns:
+   * Up to 50 features, highest score first.
+   */
   function filterPlaces(q) {
     const tokens = tokenize(q);
     if (!tokens.length) return [];
@@ -147,6 +233,18 @@
   let phraseIdx = 0;
   let cycleTimer = null;
 
+  /**
+   * stopPlaceholderCycle
+   *
+   * Purpose:
+   * Clear the rotating-placeholder interval when the input is not “faux empty”.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
   function stopPlaceholderCycle() {
     if (cycleTimer) {
       window.clearInterval(cycleTimer);
@@ -154,6 +252,18 @@
     }
   }
 
+  /**
+   * advancePlaceholderPhrase
+   *
+   * Purpose:
+   * Advance to the next animated placeholder phrase after a short exit animation.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
   function advancePlaceholderPhrase() {
     if (!wrapEl.classList.contains("search-input-wrap--faux-empty")) return;
     placeEl.classList.add("search-placeholder-cycle--exit");
@@ -168,11 +278,35 @@
     }, 450);
   }
 
+  /**
+   * startPlaceholderCycle
+   *
+   * Purpose:
+   * Start the interval that rotates placeholder phrases when appropriate.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
   function startPlaceholderCycle() {
     if (cycleTimer) return;
     cycleTimer = window.setInterval(advancePlaceholderPhrase, 4800);
   }
 
+  /**
+   * syncPlaceholderOverlay
+   *
+   * Purpose:
+   * Toggle faux-placeholder visibility, copy, and cycling based on value/focus.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
   function syncPlaceholderOverlay() {
     const q = input.value.trim();
     const focused = document.activeElement === input;
@@ -195,6 +329,20 @@
 
   const KIND_LABEL = { building: "Building", path: "Path", poi: "Place" };
 
+  /**
+   * renderResultRow
+   *
+   * Purpose:
+   * Build one <li> HTML string for a search dropdown row.
+   *
+   * Args:
+   * p - Feature to render.
+   * q - Current query (for highlight()).
+   * i - Row index (for id/data-idx).
+   *
+   * Returns:
+   * HTML string for a single result row.
+   */
   function renderResultRow(p, q, i) {
     const kindClass = `search-result__kind--${p.kind || "poi"}`;
     const kindLabel = KIND_LABEL[p.kind] || "Place";
@@ -215,12 +363,36 @@
 
   let currentMatches = [];
 
+  /**
+   * emptyMessage
+   *
+   * Purpose:
+   * User-facing message when there are zero matches (loading, error, or none).
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Short status string.
+   */
   function emptyMessage() {
     if (!placesReady && !placesError) return "Loading campus data…";
     if (placesError) return "Could not load campus data";
     return "No matching places";
   }
 
+  /**
+   * syncResults
+   *
+   * Purpose:
+   * Recompute matches from the input value and refresh the dropdown DOM.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
   function syncResults() {
     const q = input.value;
     const matches = filterPlaces(q);
@@ -243,6 +415,18 @@
     card.classList.add("search-card--open");
   }
 
+  /**
+   * onInput
+   *
+   * Purpose:
+   * Input handler: update results and placeholder state together.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
   function onInput() {
     syncResults();
     syncPlaceholderOverlay();
@@ -250,12 +434,36 @@
 
   // --- selection ---------------------------------------------------------
 
+  /**
+   * closeDropdown
+   *
+   * Purpose:
+   * Hide the results list and clear aria-expanded for accessibility.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
   function closeDropdown() {
     list.hidden = true;
     card.classList.remove("search-card--open");
     input.setAttribute("aria-expanded", "false");
   }
 
+  /**
+   * selectPlace
+   *
+   * Purpose:
+   * Fly the map to a feature, show a popup, sync input, and close the dropdown.
+   *
+   * Args:
+   * p - Selected feature with lon/lat and display fields (or null/undefined).
+   *
+   * Returns:
+   * Nothing.
+   */
   function selectPlace(p) {
     if (!p) return;
     const mmap = window.MaristMap;
