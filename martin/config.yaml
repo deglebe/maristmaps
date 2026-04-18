@@ -19,17 +19,13 @@ postgres:
   auto_bounds: quick
   on_invalid: warn
 
-  tables:
-    planet_osm_line:
-      schema: public
-      table: planet_osm_line
-      geometry_column: way
-      srid: 3857
-      minzoom: 0
-      maxzoom: 22
-      bounds: [-180.0, -85.0511, 180.0, 85.0511]
-      extent: 4096
-      buffer: 64
-      clip_geom: true
-      geometry_type: GEOMETRY
-      properties: {}
+  # Publish every table in `public` that has a geometry column, with ALL its
+  # columns exposed as MVT feature properties. This is what lets the MapLibre
+  # style filter on tags like `highway`, `building`, `amenity`, etc. If we
+  # instead list tables explicitly with `properties: {}`, Martin emits
+  # property-less features and every filter returns false (blank map).
+  #
+  # NOTE: Martin only scans the schema at startup, so any time new tables
+  # appear (e.g. after `scripts/load-osm.sh`) run `docker compose restart
+  # martin` to refresh the catalog.
+  auto_publish: true
