@@ -28,8 +28,60 @@ cursor.execute("""
                 NOTES       TEXT,
                 LOC         GEOMETRY(Point, 4326)
               );
-         """)
+         """) # 4326 is the standard GPS coord system
 
 connection.commit()
-
 print("Table Made")
+
+# load the csv files to ingest
+buildings = os.path.join(os.path.dirname(os.path.abspath(__file__)), "buildings")
+files = []
+for file in os.listdir(buildings):
+    files.append(file)  # please make sure that file is a .csv am to lazy to add a one line check :( --> maybe will later
+
+# go through each file and insert all rows into db table
+for file in files:
+    with open(os.path.join(buildings, file), newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # make lat and lon to geometry point
+            cursor.execute(
+                    """
+                    INSERT INTO LOCATIONS (
+                        KIND, SUBTYPE,
+                        ORIENTATION,
+                        ENTRANCE,
+                        BUILDING,
+                        FLOOR, ROOM, NOTES,
+                        LOC
+                    )
+
+                    VALUES               (
+                        %s, %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s, %s, %s,
+                        ST_SetSRID(ST_MakePoint(%s, %s), 4326)
+                    )
+                    """,
+                    (
+                        row["Kind"],
+                        row["Subtype"],
+                        row["Orientation"],
+                        row["Closest entrance"],
+                        row["Building"],
+                        row["Floor"],
+                        row["Room"],
+                        row["Notes"],
+                        float(row["Longitude"]),
+                        float(row["Latitude"]),
+                    )
+            )
+        print(f"Loaded {file}")
+
+connection.commit()
+cursor.close()
+connection.close()
+
+print("Loaded Data!")
