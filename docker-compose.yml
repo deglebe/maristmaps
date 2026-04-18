@@ -17,8 +17,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=${MARTIN_DATABASE_URL}
-      - PGPASSWORD=${PGPASSWORD}
+      DATABASE_URL: postgres://maristmaps:maristmaps@db:5432/maristmaps
     volumes:
       - ./martin:/config
     depends_on:

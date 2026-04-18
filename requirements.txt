@@ -1,3 +1,5 @@
+flask
+flask_sqlalchemy
 GeoAlchemy2==0.19.0
 greenlet==3.4.0
 packaging==26.1

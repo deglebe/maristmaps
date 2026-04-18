@@ -1,9 +1,35 @@
-listen_addresses: "0.0.0.0:3000"
+listen_addresses: '0.0.0.0:3000'
 keep_alive: 75
 worker_processes: 8
-cache_size_mb: 512
+
+cache:
+  size_mb: 512
+
+preferred_encoding: gzip
+
+cors:
+  origin:
+    - '*'
+  max_age: 3600
 
 postgres:
-  connection_string: "postgres://maristmaps:maristmaps@db:5432/maristmaps"
+  connection_string: ${DATABASE_URL:-postgres://maristmaps:maristmaps@db:5432/maristmaps}
   pool_size: 20
+  default_srid: 3857
   auto_bounds: quick
+  on_invalid: warn
+
+  tables:
+    planet_osm_line:
+      schema: public
+      table: planet_osm_line
+      geometry_column: way
+      srid: 3857
+      minzoom: 0
+      maxzoom: 22
+      bounds: [-180.0, -85.0511, 180.0, 85.0511]
+      extent: 4096
+      buffer: 64
+      clip_geom: true
+      geometry_type: GEOMETRY
+      properties: {}
