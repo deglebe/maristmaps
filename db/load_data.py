@@ -26,6 +26,9 @@ cursor.execute("""
                 FLOOR       VARCHAR(20),
                 ROOM        VARCHAR(100),
                 NOTES       TEXT,
+                CLOSEST_STAIR   VARCHAR(100),
+                CLOSEST_ELEVATOR VARCHAR(100),
+                DIRECTION_FROM_CONNECTOR    VARCHAR(200),
                 LOC         GEOMETRY(Point, 4326)
               );
          """) # 4326 is the standard GPS coord system
@@ -53,6 +56,7 @@ for file in files:
                         ENTRANCE,
                         BUILDING,
                         FLOOR, ROOM, NOTES,
+                        CLOSEST_STAIR, CLOSEST_ELEVATOR, DIRECTION_FROM_CONNECTOR,
                         LOC
                     )
 
@@ -61,6 +65,7 @@ for file in files:
                         %s,
                         %s,
                         %s,
+                        %s, %s, %s,
                         %s, %s, %s,
                         ST_SetSRID(ST_MakePoint(%s, %s), 4326)
                     )
@@ -74,6 +79,9 @@ for file in files:
                         row["Floor"],
                         row["Room"],
                         row["Notes"],
+                        row.get("Closest stair") or None,
+                        row.get("Closest elevator") or None,
+                        row.get("Direction from connector") or None,
                         float(row["Longitude"]),
                         float(row["Latitude"]),
                     )
