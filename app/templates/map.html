@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}map{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+{% endblock %}
+{% block body_attrs %}class="map-view"{% endblock %}
+{% block content %}
+<div id="map" role="application" aria-label="Map"></div>
+<script>
+  const cfg = {{ map_config | tojson }};
+  const map = new maplibregl.Map({
+    container: 'map',
+    attributionControl: true,
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: 'vector',
+          tiles: [cfg.tileUrl],
+          minzoom: 0,
+          maxzoom: 22
+        }
+      },
+      layers: [
+        {
+          id: 'background',
+          type: 'background',
+          paint: { 'background-color': '#e8e4df' }
+        },
+        {
+          id: 'roads',
+          type: 'line',
+          source: 'osm',
+          'source-layer': cfg.vectorLayer,
+          paint: {
+            'line-color': '#5c5c5c',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 16, 2.5]
+          }
+        }
+      ]
+    },
+    center: cfg.center,
+    zoom: cfg.zoom
+  });
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+</script>
+{% endblock %}
