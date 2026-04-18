@@ -11,8 +11,7 @@
 {% block content %}
 <div class="app-layout">
   <aside class="search-panel" aria-label="Search">
-    <form class="search-form" role="search" action="{{ url_for('main.index') }}" method="get">
-      <label class="search-label" for="search-q">Search</label>
+    <form class="search-form" role="search" onsubmit="return false;">
       <input
         class="search-input"
         id="search-q"
@@ -20,6 +19,7 @@
         type="search"
         placeholder="Search places…"
         autocomplete="off"
+        aria-label="Search"
       >
     </form>
   </aside>

@@ -108,16 +108,6 @@ body.app-shell .app-layout {
   margin: 0;
 }
 
-.search-label {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #5f6368;
-  margin-bottom: 0.5rem;
-}
-
 .search-input {
   width: 100%;
   box-sizing: border-box;
