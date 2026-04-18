@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Map{% endblock %}
+{% block title %}map{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -51,62 +51,12 @@
   .pitch-toggle button.active { background: #3f75c4; color: #fff; }
 </style>
 {% endblock %}
-{% block header %}{% endblock %}
-{% block body_attrs %}class="app-shell app-shell--map"{% endblock %}
+{% block body_attrs %}class="map-view"{% endblock %}
 {% block content %}
-<div class="map-viewport">
-  <div id="map" role="application" aria-label="Interactive map"></div>
-  <div class="search-overlay">
-    <div class="search-card" id="search-card">
-      <form class="search-form" role="search" onsubmit="return false;">
-        <div class="search-bar-row">
-          <div class="search-input-wrap search-input-wrap--faux-empty" id="search-input-wrap">
-            <input
-              class="search-input"
-              id="search-q"
-              type="text"
-              inputmode="search"
-              enterkeyhint="search"
-              autocomplete="off"
-              aria-label="Search campus map"
-              aria-controls="search-results"
-              aria-expanded="false"
-            >
-            <span class="search-placeholder-cycle" id="search-placeholder-cycle" aria-hidden="true"></span>
-          </div>
-          <button type="button" class="search-icon-btn" id="search-icon-btn" aria-label="Search" tabindex="-1">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="11" cy="11" r="7"/>
-              <path d="M20 20l-3.5-3.5"/>
-            </svg>
-          </button>
-        </div>
-      </form>
-      <ul class="search-results" id="search-results" role="listbox" hidden></ul>
-    </div>
-  </div>
-</div>
+<div id="map" role="application" aria-label="Campus map"></div>
 <script type="application/json" id="map-page-config">{{ map_config | tojson }}</script>
 <script>
-(function () {
-  /* TO BE REPLACED WITH MAPS API DATA */
-  const PLACES = [
-    { title: "James A. Cannavino Library", subtitle: "North Rd · Poughkeepsie, NY" },
-    { title: "Student Center", subtitle: "Campus life & dining" },
-    { title: "Lowell Thomas Communications Center", subtitle: "Classrooms & media" },
-    { title: "McCormick Hall", subtitle: "Residence hall" },
-    { title: "North Campus Dining Hall", subtitle: "Dining" },
-    { title: "Main campus", subtitle: "3399 North Rd, Poughkeepsie, NY" },
-  ];
-
-  const cfg = JSON.parse(document.getElementById("map-page-config").textContent);
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-    })[c]);
-  }
-
+  const cfg = JSON.parse(document.getElementById('map-page-config').textContent);
   const tiles = (table) => `${cfg.martinBase}/${table}/{z}/{x}/{y}`;
 
   /* map focused on footpaths */
@@ -402,10 +352,6 @@
   );
   map.addControl(new maplibregl.ScaleControl({ unit: 'imperial' }), 'bottom-left');
 
-  map.once('load', () => {
-    map.resize();
-  });
-
   // Tilt affordance: right-click + drag (or ctrl-drag) rotates/pitches the
   // camera, same as Google Maps. Double-click the compass to reset north/up.
   // Once pitch > PITCH_3D_THRESHOLD the 2D building fill/outline swap out for
@@ -458,6 +404,9 @@
   const toggleBtn = pitchToggle._btn;
 
   const CLICKABLE_LAYERS = ['buildings', 'paths', 'paths-stairs'];
+  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[c]);
 
   // Columns osm2pgsql's default style writes as real columns (as opposed to
   // the hstore `tags` bucket). We render them in a fixed-ish order so the
@@ -554,158 +503,5 @@
                    'is listed; then `docker compose restart martin` if not.');
     }
   });
-  const input = document.getElementById("search-q");
-  const list = document.getElementById("search-results");
-  const card = document.getElementById("search-card");
-  const placeEl = document.getElementById("search-placeholder-cycle");
-  const wrapEl = document.getElementById("search-input-wrap");
-
-  const PLACEHOLDER_PHRASES = [
-    "Find Red Foxes…",
-    "Traverse Marist…",
-    "Search places…",
-    "Where in Hancock am I?",
-    "Lower Town vs Upper Town…",
-    "Plot your next sprint to class…",
-    "The Hudson has opinions…",
-    "Lost? Join the club.",
-    "Fox dens, cafés, and naps…",
-    "Avoid the stairs (good luck)…",
-    "Rotunda traffic report…",
-    "River views, river moods…",
-  ];
-
-  let phraseIdx = 0;
-  let cycleTimer = null;
-
-  function stopPlaceholderCycle() {
-    if (cycleTimer) {
-      window.clearInterval(cycleTimer);
-      cycleTimer = null;
-    }
-  }
-
-  function advancePlaceholderPhrase() {
-    if (!wrapEl.classList.contains("search-input-wrap--faux-empty")) return;
-    placeEl.classList.add("search-placeholder-cycle--exit");
-    window.setTimeout(() => {
-      if (!wrapEl.classList.contains("search-input-wrap--faux-empty")) {
-        placeEl.classList.remove("search-placeholder-cycle--exit");
-        return;
-      }
-      phraseIdx = (phraseIdx + 1) % PLACEHOLDER_PHRASES.length;
-      placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx];
-      placeEl.classList.remove("search-placeholder-cycle--exit");
-    }, 450);
-  }
-
-  function startPlaceholderCycle() {
-    if (cycleTimer) return;
-    cycleTimer = window.setInterval(advancePlaceholderPhrase, 4800);
-  }
-
-  function syncPlaceholderOverlay() {
-    const q = input.value.trim();
-    const focused = document.activeElement === input;
-    const showFaux = !q && !focused;
-    wrapEl.classList.toggle("search-input-wrap--faux-empty", showFaux);
-    placeEl.classList.toggle("search-placeholder-cycle--off", !showFaux);
-    if (showFaux) {
-      placeEl.classList.remove("search-placeholder-cycle--exit");
-      placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx % PLACEHOLDER_PHRASES.length];
-      startPlaceholderCycle();
-    } else {
-      stopPlaceholderCycle();
-    }
-  }
-
-  function highlight(text, q) {
-    if (!q) return escapeHtml(text);
-    const lower = text.toLowerCase();
-    const idx = lower.indexOf(q.toLowerCase());
-    if (idx === -1) return escapeHtml(text);
-    const a = escapeHtml(text.slice(0, idx));
-    const b = escapeHtml(text.slice(idx, idx + q.length));
-    const c = escapeHtml(text.slice(idx + q.length));
-    return a + "<strong>" + b + "</strong>" + c;
-  }
-
-  function filterPlaces(q) {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return [];
-    return PLACES.filter(
-      (p) =>
-        p.title.toLowerCase().includes(needle) ||
-        p.subtitle.toLowerCase().includes(needle)
-    );
-  }
-
-  function syncResults() {
-    const q = input.value;
-    const matches = filterPlaces(q);
-    input.setAttribute("aria-expanded", matches.length > 0 ? "true" : "false");
-    if (!q.trim()) {
-      list.hidden = true;
-      list.innerHTML = "";
-      card.classList.remove("search-card--open");
-      return;
-    }
-    if (matches.length === 0) {
-      list.innerHTML =
-        '<li class="search-result search-result--empty" role="option">No matching places</li>';
-      list.hidden = false;
-      card.classList.add("search-card--open");
-      return;
-    }
-    list.innerHTML = matches
-      .map(
-        (p, i) =>
-          `<li class="search-result" role="option" id="search-opt-${i}" tabindex="-1">` +
-          `<span class="search-result__icon" aria-hidden="true">` +
-          `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6-4.35-6-10a6 6 0 1 1 12 0c0 5.65-6 10-6 10z"/><circle cx="12" cy="11" r="2.5"/></svg>` +
-          `</span>` +
-          `<span class="search-result__text">` +
-          `<span class="search-result__title">${highlight(p.title, q.trim())}</span>` +
-          `<span class="search-result__sub">${escapeHtml(p.subtitle)}</span>` +
-          `</span></li>`
-      )
-      .join("");
-    list.hidden = false;
-    card.classList.add("search-card--open");
-  }
-
-  function onInput() {
-    syncResults();
-    syncPlaceholderOverlay();
-  }
-
-  input.addEventListener("input", onInput);
-  input.addEventListener("focus", () => {
-    syncResults();
-    syncPlaceholderOverlay();
-  });
-  input.addEventListener("blur", syncPlaceholderOverlay);
-
-  document.addEventListener("click", (e) => {
-    if (!card.contains(e.target)) {
-      list.hidden = true;
-      card.classList.remove("search-card--open");
-      input.setAttribute("aria-expanded", "false");
-    }
-  });
-
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      list.hidden = true;
-      card.classList.remove("search-card--open");
-      input.setAttribute("aria-expanded", "false");
-      input.blur();
-    }
-  });
-
-  window.addEventListener("resize", () => map.resize());
-
-  syncPlaceholderOverlay();
-})();
 </script>
 {% endblock %}

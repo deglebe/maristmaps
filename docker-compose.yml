@@ -10,6 +10,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init-postgis.sql:/docker-entrypoint-initdb.d/01-init-postgis.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
 
   martin:
     image: ghcr.io/maplibre/martin:1.5.0
@@ -17,12 +23,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=${MARTIN_DATABASE_URL}
-      - PGPASSWORD=${PGPASSWORD}
+      DATABASE_URL: postgres://maristmaps:maristmaps@db:5432/maristmaps
     volumes:
       - ./martin:/config
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     command: --config /config/config.yaml
 
 volumes:
