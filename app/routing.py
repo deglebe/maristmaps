@@ -8,6 +8,8 @@ route_to_gpx(route) -> gpx 1.1 xml string suitable for download (we should use g
 
 campus is small enough that networkx is fast enough for this, which is nice since gpx is xml
 edges are weighted by haversine distance in metres, there is a penalty for stairs and roads, so paths are preferred
+after the osm import we also synthesize "crossing" edges (dangling sidewalk ends + road
+junctions -> nearest path) so routes can cut across intersections osm didn't wire up
 coordinates are (lon, lat) in espg:4326 which matches geojson and maplibre
 """
 
@@ -49,11 +51,27 @@ MINOR_ROAD_KINDS = (
 
 WALKABLE_HIGHWAYS = PATH_KINDS + STAIR_KINDS + MINOR_ROAD_KINDS
 
+# frozenset copies for fast `in` checks on the hot paths (graph build + bridging)
+_PATH_SET = frozenset(PATH_KINDS)
+_STAIR_SET = frozenset(STAIR_KINDS)
+_ROAD_SET = frozenset(MINOR_ROAD_KINDS)
+
 # ~4.3 km/h for speed estimate in m/s, surely this is too slow but this is what google gave me
 WALKING_SPEED_MPS = 1.2
 
 # weight multipliers for stairs, so flatter paths are preferred
 STAIRS_WEIGHT_MULT = 1.6
+# bias toward footpaths when a parallel minor road is also present
+MINOR_ROAD_WEIGHT_MULT = 1.5
+
+# max gap to bridge when a dangling path sits near another node
+CROSSING_SNAP_M = 10.0
+
+# how far from a road junction we can splice into a nearby path for hopping across
+JUNCTION_CROSSING_M = 18.0
+
+# weight multiplier for hopping across road junctions
+CROSSING_WEIGHT_MULT = 1.2
 
 # round to ~1cm precision (7 decimal degrees ~= 1.1 cm at the equator)
 COORD_ROUND = 7
@@ -82,6 +100,36 @@ def haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 def _node_key(lon: float, lat: float) -> tuple[float, float]:
     return (round(lon, COORD_ROUND), round(lat, COORD_ROUND))
+
+
+_METRES_PER_DEG_LAT = 111_320.0
+
+
+def _project_on_segment(
+    p: tuple[float, float],
+    a: tuple[float, float],
+    b: tuple[float, float],
+) -> tuple[tuple[float, float], float, float]:
+    """
+    project (lon,lat) point p onto segment a->b.
+
+    returns (projected_point, distance_m_from_p_to_projection, t in [0,1]).
+    locally equirectangular — fine for the short distances we snap across.
+    """
+    mid_lat_rad = math.radians((a[1] + b[1] + p[1]) / 3.0)
+    kx = math.cos(mid_lat_rad) * _METRES_PER_DEG_LAT
+    ky = _METRES_PER_DEG_LAT
+    ax = (p[0] - a[0]) * kx
+    ay = (p[1] - a[1]) * ky
+    bx = (b[0] - a[0]) * kx
+    by = (b[1] - a[1]) * ky
+    ab2 = bx * bx + by * by
+    if ab2 <= 1e-9:
+        return a, haversine_m(p, a), 0.0
+    t = (ax * bx + ay * by) / ab2
+    t = max(0.0, min(1.0, t))
+    proj = (a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]))
+    return proj, haversine_m(p, proj), t
 
 
 # -----------------------------------------------------------------------------
@@ -120,9 +168,72 @@ def _iter_segments(coords: Sequence[Sequence[float]]):
 
 
 def _edge_weight(kind: str, length_m: float) -> float:
-    if kind in STAIR_KINDS:
+    if kind in _STAIR_SET:
         return length_m * STAIRS_WEIGHT_MULT
+    if kind in _ROAD_SET:
+        return length_m * MINOR_ROAD_WEIGHT_MULT
     return length_m
+
+
+def _add_crossing_edge(
+    g: nx.Graph,
+    a: tuple[float, float],
+    b: tuple[float, float],
+    distance_m: float,
+) -> None:
+    """
+    add a synthetic 'just walk across' connector. used by both bridging passes.
+    no name / osm_id because it's not an osm feature, just an inferred link.
+    """
+    g.add_edge(
+        a, b,
+        length_m=distance_m,
+        weight=distance_m * CROSSING_WEIGHT_MULT,
+        kind="crossing",
+        name=None,
+        osm_id=None,
+    )
+
+
+def _splice_path_edge(
+    g: nx.Graph,
+    u: tuple[float, float],
+    v: tuple[float, float],
+    kind: str,
+    name: str | None,
+    osm_id: int | None,
+    new_node: tuple[float, float],
+) -> None:
+    """
+    split path edge (u,v) at new_node, inserting two sub-edges that
+    inherit kind/name/osm_id. no-op if new_node coincides with u or v.
+    caller is responsible for removing (u, v) first.
+    """
+    for endpoint in (u, v):
+        length = haversine_m(endpoint, new_node)
+        if length <= 0:
+            continue
+        g.add_edge(
+            endpoint, new_node,
+            length_m=length,
+            weight=_edge_weight(kind, length),
+            kind=kind,
+            name=name,
+            osm_id=osm_id,
+        )
+
+
+def _incident_kinds(g: nx.Graph) -> dict[tuple[float, float], set[str]]:
+    """
+    map every node to the set of highway kinds on its incident edges.
+    one O(E) pass shared by both bridging passes.
+    """
+    out: dict[tuple[float, float], set[str]] = {}
+    for u, v, data in g.edges(data=True):
+        k = data.get("kind") or "path"
+        out.setdefault(u, set()).add(k)
+        out.setdefault(v, set()).add(k)
+    return out
 
 
 def build_graph() -> nx.Graph:
@@ -175,7 +286,101 @@ def build_graph() -> nx.Graph:
                 name=name,
                 osm_id=osm_id,
             )
+    # order matters: junction bridging can create new path nodes (by
+    # splicing segments) that then become candidates for endpoint bridging.
+    _bridge_road_junctions_to_paths(g)
+    _bridge_dangling_path_ends(g)
     return g
+
+
+def _bridge_road_junctions_to_paths(g: nx.Graph) -> int:
+    """
+    returns the number of connector edges added.
+    at every minor-road junction, splice short connectors to nearby path
+    so router can hop across intersections, roads, etc. yes, this is pro-jaywalking.
+
+    motivating case: the two paths and intersection at hancock.
+    """
+    if g.number_of_nodes() == 0:
+        return 0
+
+    def _road_degree(n: tuple[float, float]) -> int:
+        return sum(
+            1 for _u, _v, d in g.edges(n, data=True)
+            if (d.get("kind") or "") in _ROAD_SET
+        )
+
+    junctions = [n for n in list(g.nodes) if _road_degree(n) >= 2]
+    if not junctions:
+        return 0
+
+    added = 0
+    for jn in junctions:
+        # refetch each iteration so splits from earlier junctions are
+        # visible (we might need to splice a sub-segment).
+        path_edges = [
+            (u, v, d.get("kind") or "path", d.get("name"), d.get("osm_id"))
+            for u, v, d in g.edges(data=True)
+            if (d.get("kind") or "") in _PATH_SET
+        ]
+        # a single junction can legitimately connect to several nearby
+        # sidewalks (both sides of the road, plus the across-the-T one).
+        # dedup by target node so we don't stack duplicate connectors.
+        seen_targets: set[tuple[float, float]] = set()
+        for u, v, kind, name, osm_id in path_edges:
+            proj, dist, _t = _project_on_segment(jn, u, v)
+            if dist > JUNCTION_CROSSING_M:
+                continue
+            node = _node_key(*proj)
+            if node == jn or node in seen_targets:
+                continue
+            if g.has_edge(jn, node):
+                seen_targets.add(node)
+                continue
+            # splice the path edge if we landed mid-segment.
+            if node != u and node != v and g.has_edge(u, v):
+                g.remove_edge(u, v)
+                _splice_path_edge(g, u, v, kind, name, osm_id, node)
+            _add_crossing_edge(g, jn, node, dist)
+            seen_targets.add(node)
+            added += 1
+    return added
+
+
+def _bridge_dangling_path_ends(g: nx.Graph) -> int:
+    """
+    stitch path-only degree-1 endpoints onto the nearest nearby node.
+    catches sidewalks that stop just short of something they plainly
+    connect to in real life. returns the number of edges added.
+    """
+    if g.number_of_nodes() == 0:
+        return 0
+
+    incident = _incident_kinds(g)
+    dangling = [
+        n for n in g.nodes
+        if g.degree(n) == 1 and incident.get(n, set()) <= _PATH_SET
+    ]
+    if not dangling:
+        return 0
+
+    all_nodes = list(g.nodes)
+    added = 0
+    for end in dangling:
+        best = None
+        best_d = CROSSING_SNAP_M
+        for other in all_nodes:
+            if other == end or g.has_edge(end, other):
+                continue
+            d = haversine_m(end, other)
+            if d < best_d:
+                best = other
+                best_d = d
+        if best is None:
+            continue
+        _add_crossing_edge(g, end, best, best_d)
+        added += 1
+    return added
 
 
 def get_graph() -> nx.Graph:
@@ -365,8 +570,13 @@ def route_to_gpx(route: Route, *, name: str | None = None) -> str:
 
 def debug_stats(graph: nx.Graph | None = None) -> dict:
     g = graph or get_graph()
+    by_kind: dict[str, int] = {}
+    for _u, _v, data in g.edges(data=True):
+        k = data.get("kind") or "path"
+        by_kind[k] = by_kind.get(k, 0) + 1
     return {
         "nodes": g.number_of_nodes(),
         "edges": g.number_of_edges(),
         "components": nx.number_connected_components(g) if g.number_of_nodes() else 0,
+        "edges_by_kind": by_kind,
     }
