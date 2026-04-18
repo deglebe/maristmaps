@@ -404,3 +404,227 @@ body.map-view #map {
   background: #3f75c4;
   color: #fff;
 }
+
+/* ----- Directions mode (inside the search card) ------------------------
+ *
+ * The search card has two stacked modes (see index.html). The top-level
+ * `<div data-mode="...">` wrappers are toggled via the `hidden`
+ * attribute by search.js, so we don't need any display: rules here — we
+ * just style the inner layout. */
+
+.directions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.directions-header__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #202124;
+}
+
+/* Two stacked inputs with a swap button pinned to the right. Uses a
+   grid so the swap spans the two rows. */
+.directions-fields {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0.3rem 0.4rem;
+  padding: 0.25rem 0.75rem 0.5rem;
+  align-items: stretch;
+}
+
+.directions-field {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.35rem;
+  background: #f1f3f4;
+  border-radius: 6px;
+  min-height: 2.25rem;
+}
+
+.directions-field:focus-within {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #1a73e8;
+}
+
+.directions-marker {
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: currentColor;
+  color: #9aa0a6;
+}
+
+.directions-marker--from { color: #34a853; }
+.directions-marker--to   { color: #ea4335; }
+
+.directions-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: max(16px, 0.9375rem);
+  color: #202124;
+  padding: 0.25rem 0;
+}
+
+.directions-input::placeholder {
+  color: #80868b;
+}
+
+.directions-field-clear {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #5f6368;
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.directions-field-clear:hover { opacity: 1; background: #e8eaed; }
+
+.directions-swap-btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid #dadce0;
+  background: #fff;
+  color: #5f6368;
+  cursor: pointer;
+}
+
+.directions-swap-btn:hover:not(:disabled) {
+  background: #f1f3f4;
+  color: #202124;
+}
+
+.directions-swap-btn:disabled {
+  color: #c0c4c9;
+  cursor: default;
+}
+
+.search-results--directions {
+  border-top: 1px solid #e8eaed;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.directions-summary {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #202124;
+  border-top: 1px solid #e8eaed;
+}
+
+.directions-actions {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border-top: 1px solid #e8eaed;
+}
+
+.directions-actions button {
+  flex: 1;
+  min-width: 5rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #dadce0;
+  background: #fff;
+  color: #1a73e8;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.directions-actions button:hover:not(:disabled) {
+  background: #f1f7ff;
+  border-color: #1a73e8;
+}
+
+.directions-actions button:disabled {
+  color: #9aa0a6;
+  cursor: default;
+  background: #fff;
+}
+
+.directions-actions button#directions-gpx-btn {
+  background: #1a73e8;
+  color: #fff;
+  border-color: #1a73e8;
+}
+
+.directions-actions button#directions-gpx-btn:hover:not(:disabled) {
+  background: #1765cf;
+  border-color: #1765cf;
+}
+
+.directions-actions button#directions-gpx-btn:disabled {
+  background: #c3d4f3;
+  border-color: #c3d4f3;
+  color: #fff;
+}
+
+/* ----- Map right-click context menu ------------------------------------
+ *
+ * The menu is a floating block positioned at the click point by
+ * routing.js. Visibility is driven by the `hidden` attribute; the
+ * `[hidden]` selector below is required because `.map-context-menu`
+ * sets `display: flex`, which has equal specificity to the UA-provided
+ * `[hidden] { display: none }` rule and would otherwise win on load
+ * order and keep the menu permanently visible. */
+.map-context-menu {
+  position: fixed;
+  z-index: 1200;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow:
+    0 1px 2px rgba(60, 64, 67, 0.3),
+    0 2px 6px rgba(60, 64, 67, 0.15);
+  padding: 0.25rem 0;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  font: 13px/1.35 system-ui, sans-serif;
+}
+
+.map-context-menu[hidden] {
+  display: none;
+}
+
+.map-context-menu button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0.5rem 0.85rem;
+  font: inherit;
+  color: #202124;
+  cursor: pointer;
+}
+
+.map-context-menu button:hover,
+.map-context-menu button:focus-visible {
+  background: #f1f3f4;
+  outline: none;
+}
