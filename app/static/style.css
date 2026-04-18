@@ -1,46 +1,158 @@
 body {
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   margin: 1rem;
   line-height: 1.4;
 }
+
 header {
   margin-bottom: 1rem;
 }
+
 header a,
 header span,
 header form {
   margin-right: 0.75rem;
 }
+
 header .inline-form {
   display: inline;
 }
+
 main {
   max-width: 40rem;
 }
+
 form label {
   display: block;
   margin-bottom: 0.5rem;
 }
+
 form input {
   margin-left: 0.25rem;
 }
+
 ul.flash {
   list-style: square;
   padding-left: 1.25rem;
 }
+
 .flash .error {
   color: #b00;
 }
+
 .flash .ok {
   color: #060;
 }
 
+/* App shell: full-viewport maps-style layout */
+body.app-shell {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.app-shell header.app-topbar {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.625rem 1rem;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #dadce0;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
+}
+
+body.app-shell .brand {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #d93025;
+  text-decoration: none;
+}
+
+body.app-shell .brand:hover {
+  text-decoration: underline;
+}
+
+body.app-shell main {
+  flex: 1;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body.app-shell .app-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.search-panel {
+  flex: 0 0 min(22rem, 38vw);
+  max-width: 24rem;
+  background: #fff;
+  border-right: 1px solid #dadce0;
+  padding: 1rem;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.search-form {
+  margin: 0;
+}
+
+.search-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5f6368;
+  margin-bottom: 0.5rem;
+}
+
+.search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.map-stage {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  background: #e8eaed;
+}
+
+.map-stage #map {
+  position: absolute;
+  inset: 0;
+}
+
+/* Legacy full-bleed map page (if reused later) */
 body.map-view {
   margin: 0;
   height: 100vh;
   display: flex;
   flex-direction: column;
 }
+
 body.map-view header {
   flex-shrink: 0;
   margin: 0;
@@ -48,6 +160,7 @@ body.map-view header {
   background: #fff;
   border-bottom: 1px solid #ccc;
 }
+
 body.map-view main {
   flex: 1;
   max-width: none;
@@ -56,6 +169,7 @@ body.map-view main {
   position: relative;
   min-height: 0;
 }
+
 body.map-view #map {
   position: absolute;
   inset: 0;

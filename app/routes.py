@@ -1,6 +1,6 @@
 import os
 
-from flask import Blueprint, g, render_template
+from flask import Blueprint, render_template
 
 bp = Blueprint("main", __name__)
 
@@ -22,6 +22,4 @@ def _map_page_config():
 
 @bp.route("/")
 def index():
-    if g.user is None:
-        return render_template("index.html")
     return render_template("map.html", map_config=_map_page_config())

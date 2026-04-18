@@ -1,14 +1,35 @@
 {% extends "base.html" %}
-{% block title %}map{% endblock %}
+{% block title %}Marist Maps{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 {% endblock %}
-{% block body_attrs %}class="map-view"{% endblock %}
+{% block header %}
+<a href="{{ url_for('main.index') }}" class="brand">marist maps</a>
+{% endblock %}
+{% block body_attrs %}class="app-shell"{% endblock %}
 {% block content %}
-<div id="map" role="application" aria-label="Map"></div>
+<div class="app-layout">
+  <aside class="search-panel" aria-label="Search">
+    <form class="search-form" role="search" action="{{ url_for('main.index') }}" method="get">
+      <label class="search-label" for="search-q">Search</label>
+      <input
+        class="search-input"
+        id="search-q"
+        name="q"
+        type="search"
+        placeholder="Search places…"
+        autocomplete="off"
+      >
+    </form>
+  </aside>
+  <section class="map-stage" aria-label="Map">
+    <div id="map" role="application" aria-label="Interactive map"></div>
+  </section>
+</div>
+<script type="application/json" id="map-page-config">{{ map_config | tojson }}</script>
 <script>
-  const cfg = {{ map_config | tojson }};
+  const cfg = JSON.parse(document.getElementById("map-page-config").textContent);
   const map = new maplibregl.Map({
     container: 'map',
     attributionControl: true,
@@ -44,5 +65,8 @@
     zoom: cfg.zoom
   });
   map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  map.once('load', () => {
+    map.resize();
+  });
 </script>
 {% endblock %}
