@@ -22,4 +22,4 @@ def _map_page_config():
 
 @bp.route("/")
 def index():
-    return render_template("map.html", map_config=_map_page_config())
+    return render_template("index.html", map_config=_map_page_config())
