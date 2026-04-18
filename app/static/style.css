@@ -294,3 +294,113 @@ body.app-shell--map .flash {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+/* A small chip that labels result rows as building / path / POI so users
+   can tell a named pedestrian walk apart from a building with the same
+   street name. */
+.search-result__kind {
+  align-self: flex-start;
+  margin-top: 0.125rem;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5f6368;
+  background: #f1f3f4;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+}
+
+.search-result__kind--building { background: #e6efff; color: #174ea6; }
+.search-result__kind--path     { background: #fdecd4; color: #8a4a10; }
+.search-result__kind--poi      { background: #e6f4ea; color: #137333; }
+
+/* Bare standalone map page (no app-shell / search overlay). */
+body.map-view {
+  margin: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body.map-view header.app-topbar {
+  display: none;
+}
+
+body.map-view main {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body.map-view #map {
+  position: absolute;
+  inset: 0;
+}
+
+/* Popup styling shared across every page that embeds the map. */
+.maplibregl-popup-content {
+  font: 13px/1.35 system-ui, sans-serif;
+  padding: 0.5rem 0.7rem;
+  max-width: 22rem;
+}
+
+.maplibregl-popup-content strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 14px;
+}
+
+.maplibregl-popup-content .tag {
+  color: #666;
+  font-size: 11px;
+}
+
+.maplibregl-popup-content table.attrs {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+.maplibregl-popup-content table.attrs th,
+.maplibregl-popup-content table.attrs td {
+  text-align: left;
+  vertical-align: top;
+  padding: 2px 6px 2px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.maplibregl-popup-content table.attrs th {
+  font-weight: 500;
+  color: #555;
+  white-space: nowrap;
+}
+
+.maplibregl-popup-content table.attrs td {
+  color: #222;
+  word-break: break-word;
+}
+
+/* Custom 3D / tilt toggle that sits with the nav controls. */
+.pitch-toggle button {
+  width: 29px;
+  height: 29px;
+  font: 600 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.5px;
+  background: #fff;
+  color: #333;
+  border: 0;
+  cursor: pointer;
+}
+
+.pitch-toggle button:hover {
+  background: #f0f0f0;
+}
+
+.pitch-toggle.active button,
+.pitch-toggle button.active {
+  background: #3f75c4;
+  color: #fff;
+}
