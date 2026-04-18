@@ -2,20 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}maristmaps{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
 </head>
-<body>
-  <header>
-    <a href="{{ url_for('main.index') }}">Home</a>
-    {% if g.user %}
-      <span>{{ g.user.email }}</span>
-      <form class="inline-form" method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Logout</button></form>
-    {% else %}
-      <a href="{{ url_for('auth.login') }}">Login</a>
-      <a href="{{ url_for('auth.register') }}">Register</a>
-    {% endif %}
+<body {% block body_attrs %}{% endblock %}>
+  <header class="app-topbar">
+    {% block header %}
+    <a href="{{ url_for('main.index') }}" class="header-link">Home</a>
+    {% endblock %}
   </header>
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}

@@ -1,36 +1,406 @@
 body {
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   margin: 1rem;
   line-height: 1.4;
 }
+
 header {
   margin-bottom: 1rem;
 }
+
 header a,
 header span,
 header form {
   margin-right: 0.75rem;
 }
+
 header .inline-form {
   display: inline;
 }
+
 main {
   max-width: 40rem;
 }
+
 form label {
   display: block;
   margin-bottom: 0.5rem;
 }
+
 form input {
   margin-left: 0.25rem;
 }
+
 ul.flash {
   list-style: square;
   padding-left: 1.25rem;
 }
+
 .flash .error {
   color: #b00;
 }
+
 .flash .ok {
   color: #060;
+}
+
+/* App shell: full-viewport maps-style layout */
+body.app-shell {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.app-shell header.app-topbar {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.625rem 1rem;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-top: max(0.625rem, env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #dadce0;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
+}
+
+body.app-shell main {
+  flex: 1;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Map fills screen */
+body.app-shell--map header.app-topbar {
+  display: none;
+}
+
+body.app-shell--map main {
+  flex: 1;
+  min-height: 0;
+}
+
+body.app-shell--map .flash {
+  position: fixed;
+  top: max(0.5rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  margin: 0;
+  max-width: min(36rem, calc(100vw - 2rem));
+}
+
+/* Map fills main */
+.map-viewport {
+  position: absolute;
+  inset: 0;
+  background: #e8eaed;
+}
+
+.map-viewport #map {
+  position: absolute;
+  inset: 0;
+}
+
+.search-overlay {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 1000;
+  max-width: min(28rem, 100%);
+  pointer-events: none;
+}
+
+.search-card {
+  pointer-events: auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow:
+    0 1px 2px rgba(60, 64, 67, 0.3),
+    0 2px 6px rgba(60, 64, 67, 0.15);
+  overflow: hidden;
+}
+
+.search-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0 0.75rem;
+}
+
+.search-form {
+  margin: 0;
+  width: 100%;
+}
+
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-wrap .search-input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border: none;
+  padding: 0.5rem 0.25rem;
+  margin: 0;
+  font-size: max(16px, 1rem);
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: #202124;
+}
+
+.search-input-wrap--faux-empty .search-input {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: transparent;
+}
+
+.search-input-wrap .search-input:focus {
+  box-shadow: none;
+  color: #202124;
+  -webkit-text-fill-color: #202124;
+  caret-color: auto;
+}
+
+.search-placeholder-cycle {
+  position: absolute;
+  left: 0.25rem;
+  right: 0.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  pointer-events: none;
+  color: #70757a;
+  font-size: max(16px, 1rem);
+  line-height: 1.3;
+  transition: opacity 0.45s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-placeholder-cycle--exit {
+  opacity: 0;
+}
+
+.search-placeholder-cycle--off {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.search-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #5f6368;
+  cursor: default;
+  border-radius: 50%;
+}
+
+.search-icon-btn:hover {
+  background: #f1f3f4;
+  color: #202124;
+}
+
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #e8eaed;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.search-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  border: none;
+  background: #fff;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: left;
+  font: inherit;
+}
+
+.search-result:hover,
+.search-result:focus {
+  background: #f8f9fa;
+}
+
+.search-result--empty {
+  cursor: default;
+  color: #5f6368;
+  font-size: 0.875rem;
+}
+
+.search-result__icon {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: #5f6368;
+}
+
+.search-result__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.search-result__title {
+  font-size: 0.9375rem;
+  color: #202124;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.search-result__title strong {
+  font-weight: 600;
+}
+
+.search-result__sub {
+  font-size: 0.8125rem;
+  color: #70757a;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* A small chip that labels result rows as building / path / POI so users
+   can tell a named pedestrian walk apart from a building with the same
+   street name. */
+.search-result__kind {
+  align-self: flex-start;
+  margin-top: 0.125rem;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5f6368;
+  background: #f1f3f4;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+}
+
+.search-result__kind--building { background: #e6efff; color: #174ea6; }
+.search-result__kind--path     { background: #fdecd4; color: #8a4a10; }
+.search-result__kind--poi      { background: #e6f4ea; color: #137333; }
+
+/* Bare standalone map page (no app-shell / search overlay). */
+body.map-view {
+  margin: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body.map-view header.app-topbar {
+  display: none;
+}
+
+body.map-view main {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body.map-view #map {
+  position: absolute;
+  inset: 0;
+}
+
+/* Popup styling shared across every page that embeds the map. */
+.maplibregl-popup-content {
+  font: 13px/1.35 system-ui, sans-serif;
+  padding: 0.5rem 0.7rem;
+  max-width: 22rem;
+}
+
+.maplibregl-popup-content strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 14px;
+}
+
+.maplibregl-popup-content .tag {
+  color: #666;
+  font-size: 11px;
+}
+
+.maplibregl-popup-content table.attrs {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+.maplibregl-popup-content table.attrs th,
+.maplibregl-popup-content table.attrs td {
+  text-align: left;
+  vertical-align: top;
+  padding: 2px 6px 2px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.maplibregl-popup-content table.attrs th {
+  font-weight: 500;
+  color: #555;
+  white-space: nowrap;
+}
+
+.maplibregl-popup-content table.attrs td {
+  color: #222;
+  word-break: break-word;
+}
+
+/* Custom 3D / tilt toggle that sits with the nav controls. */
+.pitch-toggle button {
+  width: 29px;
+  height: 29px;
+  font: 600 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.5px;
+  background: #fff;
+  color: #333;
+  border: 0;
+  cursor: pointer;
+}
+
+.pitch-toggle button:hover {
+  background: #f0f0f0;
+}
+
+.pitch-toggle.active button,
+.pitch-toggle button.active {
+  background: #3f75c4;
+  color: #fff;
 }

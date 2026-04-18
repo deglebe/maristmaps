@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}map{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+{% endblock %}
+{% block body_attrs %}class="map-view"{% endblock %}
+{% block content %}
+<div id="map" role="application" aria-label="Campus map"></div>
+<script type="application/json" id="map-page-config">{{ map_config | tojson }}</script>
+<script src="{{ url_for('static', filename='map.js') }}" defer></script>
+{% endblock %}
