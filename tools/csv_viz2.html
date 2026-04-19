@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>maristmaps viz</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: #111; color: #ddd; font-size: 14px;
+    }
+    header {
+      padding: 10px 16px; border-bottom: 1px solid #222;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .title { font-weight: 600; color: #eee; margin-right: 4px; }
+    input[type=file], select, header button {
+      background: #1a1a1a; color: #ccc; border: 1px solid #2a2a2a;
+      border-radius: 6px; padding: 6px 10px;
+      font-family: inherit; font-size: 13px; outline: none; cursor: pointer;
+    }
+    header button:hover { background: #222; }
+    header button.active { background: #252525; color: #eee; border-color: #444; }
+    #toggle-edit.active { background: #2a2a1a; color: #daa520; border-color: #554530; }
+    #toggle-route.active { background: #2a1f1a; color: #f39c12; border-color: #5c3c22; }
+    select:focus, input[type=file]:focus { border-color: #444; }
+    .pref-toggle {
+      display: flex; align-items: center; gap: 6px;
+      color: #888; font-size: 12px; cursor: pointer; user-select: none;
+    }
+    .pref-toggle input { margin: 0; cursor: pointer; }
+    #count { color: #666; font-size: 12px; }
+    .hint { color: #555; font-size: 12px; margin-left: auto; }
+    #map { height: calc(100vh - 50px); width: 100%; }
+    .leaflet-container { background: #1a1a1a; }
+    .viz-marker { background: none; border: none; }
+
+    #legend {
+      position: absolute; top: 62px; right: 12px;
+      background: rgba(17,17,17,0.92); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 8px 12px; font-size: 12px; z-index: 1000;
+    }
+    #legend.hidden { display: none; }
+    #legend .item {
+      display: flex; align-items: center; gap: 8px;
+      margin: 4px 0; min-height: 18px;
+    }
+    #legend .sym {
+      width: 16px; height: 16px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    #info {
+      position: absolute; bottom: 12px; left: 12px;
+      background: rgba(17,17,17,0.95); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 12px 14px; font-size: 13px;
+      max-width: 320px; z-index: 1000; display: none; line-height: 1.5;
+    }
+    #info .k {
+      color: #555; text-transform: uppercase; font-size: 10px;
+      letter-spacing: 0.06em; margin-top: 6px;
+    }
+    #info .k:first-child { margin-top: 0; }
+    #info .v { color: #ccc; }
+
+    #panel {
+      position: absolute; top: 62px; right: 12px; width: 280px;
+      background: rgba(17,17,17,0.97); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px; font-size: 13px;
+      z-index: 1100; display: none;
+      max-height: calc(100vh - 80px); overflow-y: auto;
+    }
+    #panel.open { display: block; }
+    .panel-hd {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .panel-hd .t { font-weight: 600; color: #eee; }
+    .panel-hd button {
+      background: none; border: none; color: #666; font-size: 20px;
+      cursor: pointer; padding: 0 4px; line-height: 1;
+    }
+    .kind-row { display: flex; gap: 4px; margin-bottom: 12px; }
+    .kind-btn {
+      flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 500;
+      background: #1a1a1a; color: #666; border: 1px solid #2a2a2a;
+      border-radius: 6px; font-family: inherit; cursor: pointer;
+    }
+    .kind-btn.active { background: #252525; color: #ccc; border-color: #444; }
+    .field { margin-bottom: 10px; }
+    .field.hidden { display: none; }
+    .field label {
+      display: block; color: #666; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
+    }
+    .field input, .field select {
+      width: 100%; padding: 8px 10px; font-size: 13px;
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
+      color: #ccc; font-family: inherit; outline: none;
+    }
+    .field input:focus, .field select:focus { border-color: #444; }
+    .field-pair { display: flex; gap: 6px; }
+    .field-pair input { flex: 1; }
+    .field-hint { color: #555; font-size: 11px; margin-top: 4px; }
+    .btn-primary {
+      width: 100%; padding: 10px; font-size: 13px; font-weight: 600;
+      background: #eee; color: #111; border: none; border-radius: 6px;
+      font-family: inherit; cursor: pointer; margin-top: 4px;
+    }
+    .btn-primary:hover { background: #fff; }
+    .btn-danger {
+      width: 100%; padding: 8px; font-size: 12px;
+      background: transparent; color: #a55; border: 1px solid #3a2020;
+      border-radius: 6px; font-family: inherit; cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-danger:hover { background: #2a1a1a; color: #c66; }
+    .btn-danger.hidden { display: none; }
+
+    /* Route panel: same rail as main panel, offset when both open */
+    #route-panel {
+      position: absolute; top: 62px; right: 12px; width: 260px;
+      background: rgba(17,17,17,0.97); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px; font-size: 13px;
+      z-index: 1050; display: none;
+    }
+    #route-panel.open { display: block; }
+    #panel.open ~ #route-panel.open { right: 304px; }
+    .route-slot {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; margin-bottom: 8px;
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
+    }
+    .route-slot.start { border-left: 3px solid #5a5; }
+    .route-slot.end { border-left: 3px solid #e74c3c; }
+    .route-slot .lbl {
+      color: #666; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; min-width: 34px;
+    }
+    .route-slot .val { flex: 1; color: #ccc; font-size: 12px; }
+    .route-slot .val.empty { color: #555; font-style: italic; }
+    .route-slot button {
+      background: none; border: none; color: #555; font-size: 16px;
+      cursor: pointer; padding: 0 2px; line-height: 1;
+    }
+    .route-slot button:hover { color: #888; }
+    .route-slot button.hidden { display: none; }
+    .route-info {
+      margin-top: 8px; padding: 10px; font-size: 12px;
+      background: #1a1a1a; border-radius: 6px; color: #aaa;
+      line-height: 1.5; min-height: 40px;
+    }
+    .route-info .note {
+      color: #f39c12; font-size: 11px; margin-top: 4px;
+    }
+    .route-info.error { color: #c66; }
+    .route-info .empty { color: #555; font-style: italic; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="title">maristmaps viz</div>
+  <input type="file" id="files" multiple accept=".csv">
+  <select id="f-bldg"><option value="">all buildings</option></select>
+  <select id="f-floor"><option value="">all floors</option></select>
+  <span id="count"></span>
+  <button id="toggle-add">+ add point</button>
+  <button id="toggle-edit">✎ edit</button>
+  <button id="toggle-route">🧭 route</button>
+  <label class="pref-toggle">
+    <input type="checkbox" id="prefer-elevator">
+    prefer elevator
+  </label>
+  <button id="dl" style="display:none">download CSVs</button>
+  <span class="hint" id="hint">hover a node to see its closest links</span>
+</header>
+<div id="map"></div>
+
+<div id="legend">
+  <div class="item"><span class="sym" id="leg-room"></span>Room</div>
+  <div class="item"><span class="sym" id="leg-entrance"></span>Entrance</div>
+  <div class="item"><span class="sym" id="leg-stairs"></span>Stairs</div>
+  <div class="item"><span class="sym" id="leg-elevator"></span>Elevator</div>
+</div>
+
+<div id="info"></div>
+
+<div id="panel">
+  <div class="panel-hd">
+    <span class="t" id="panel-title">Add point</span>
+    <button id="panel-close">&times;</button>
+  </div>
+  <div class="kind-row">
+    <button class="kind-btn active" data-k="room">Room</button>
+    <button class="kind-btn" data-k="entrance">Entrance</button>
+    <button class="kind-btn" data-k="stairs">Stairs</button>
+    <button class="kind-btn" data-k="elevator">Elevator</button>
+  </div>
+  <div class="field">
+    <label>Building</label>
+    <input id="d-bldg" list="bldg-list" placeholder="e.g. Dyson">
+    <datalist id="bldg-list"></datalist>
+  </div>
+  <div class="field">
+    <label>Floor</label>
+    <input id="d-floor" placeholder="e.g. 2, or 1-4 for connectors">
+  </div>
+  <div class="field" id="f-name">
+    <label id="name-lbl">Room number</label>
+    <input id="d-name" placeholder="e.g. 2016">
+  </div>
+  <div class="field hidden" id="f-ori">
+    <label>Building face</label>
+    <select id="d-ori">
+      <option>N</option><option>NE</option><option>E</option><option>SE</option>
+      <option>S</option><option>SW</option><option>W</option><option>NW</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Location</label>
+    <div class="field-pair">
+      <input id="d-lat" placeholder="latitude" inputmode="decimal">
+      <input id="d-lng" placeholder="longitude" inputmode="decimal">
+    </div>
+    <div class="field-hint" id="loc-hint">click the map to set a location</div>
+  </div>
+  <div class="field">
+    <label>Notes (optional)</label>
+    <input id="d-notes">
+  </div>
+  <button class="btn-primary" id="d-primary">Add point</button>
+  <button class="btn-danger hidden" id="d-delete">Delete this point</button>
+</div>
+
+<div id="route-panel">
+  <div class="panel-hd">
+    <span class="t">Route</span>
+    <button id="route-close">&times;</button>
+  </div>
+  <div class="route-slot start">
+    <span class="lbl">Start</span>
+    <span class="val empty" id="route-start-val">click a marker</span>
+    <button class="hidden" id="route-start-clear">&times;</button>
+  </div>
+  <div class="route-slot end">
+    <span class="lbl">End</span>
+    <span class="val empty" id="route-end-val">click a marker</span>
+    <button class="hidden" id="route-end-clear">&times;</button>
+  </div>
+  <div class="route-info" id="route-info">
+    <span class="empty">pick two points to compute a route</span>
+  </div>
+</div>
+
+<script>
+// ── state ─────────────────────────────────────────────────────────
+const allEntries = [];
+const entryMarkers = new Map();
+const headersByBuilding = {};
+let markers = [];
+let relLines = [];
+let pinned = null;
+
+const DEFAULT_HEADERS = [
+  '#', 'Kind', 'Subtype', 'Orientation', 'Closest entrance',
+  'Closest entrance (elevator)',
+  'Building', 'Floor', 'Room', 'Latitude', 'Longitude', 'Notes',
+  'Closest stair', 'Closest elevator', 'Direction from connector',
+  'Date', 'Time', 'Timestamp',
+];
+
+const draft = {
+  kind: 'room', bldg: '', floor: '', name: '', ori: 'N',
+  lat: null, lng: null, notes: '',
+};
+let panelOpen = false;
+let panelMode = 'add';
+let editingEntry = null;
+let editMode = false;
+let routeMode = false;
+let draftMarker = null;
+let preferElevator = false;
+
+// Routing state
+let routeStart = null;
+let routeEnd = null;
+let routeLines = [];
+let routeRings = [];
+
+// ── icons ────────────────────────────────────────────────────────
+// Distinct silhouettes for each kind — shape, not just color.
+const SVG_ROOM = '<svg width="14" height="14"><circle cx="7" cy="7" r="5" fill="#5a5" stroke="#111" stroke-width="1.5"/></svg>';
+const SVG_ENTRANCE = '<svg width="14" height="16" viewBox="0 0 14 16"><rect x="2" y="2" width="10" height="13" rx="1.5" fill="#5a9fff" stroke="#111" stroke-width="1.5"/><circle cx="9.5" cy="9" r="0.9" fill="#111"/></svg>';
+const SVG_STAIRS = '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 2 L12 12 L2 12 Z" fill="#daa520" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+const SVG_ELEVATOR = '<svg width="14" height="16" viewBox="0 0 14 16"><rect x="2" y="2" width="10" height="13" rx="1.5" fill="#6af" stroke="#111" stroke-width="1.5"/><path d="M5 6 L7 4 L9 6 M5 11 L7 13 L9 11" fill="none" stroke="#111" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const ICON_ROOM = L.divIcon({ className: 'viz-marker', html: SVG_ROOM, iconSize: [14, 14], iconAnchor: [7, 7] });
+const ICON_ENTRANCE = L.divIcon({ className: 'viz-marker', html: SVG_ENTRANCE, iconSize: [14, 16], iconAnchor: [7, 8] });
+const ICON_STAIRS = L.divIcon({ className: 'viz-marker', html: SVG_STAIRS, iconSize: [14, 14], iconAnchor: [7, 7] });
+const ICON_ELEVATOR = L.divIcon({ className: 'viz-marker', html: SVG_ELEVATOR, iconSize: [14, 16], iconAnchor: [7, 8] });
+
+function iconFor(e) {
+  if (e.Kind === 'entrance') return ICON_ENTRANCE;
+  if (e.Kind === 'connector') return e.Subtype === 'elevator' ? ICON_ELEVATOR : ICON_STAIRS;
+  return ICON_ROOM;
+}
+
+// populate legend with the same SVGs
+document.getElementById('leg-room').innerHTML = SVG_ROOM;
+document.getElementById('leg-entrance').innerHTML = SVG_ENTRANCE;
+document.getElementById('leg-stairs').innerHTML = SVG_STAIRS;
+document.getElementById('leg-elevator').innerHTML = SVG_ELEVATOR;
+
+// ── map ───────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([41.72, -73.93], 16);
+L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 20 }
+).addTo(map);
+
+map.on('click', (ev) => {
+  if (panelOpen && panelMode === 'add') {
+    setDraftLocation(ev.latlng.lat, ev.latlng.lng);
+  } else if (!panelOpen && !routeMode && pinned) {
+    pinned = null; clearRelLines(); hideInfo();
+  }
+});
+
+// ── CSV parsing / writing ────────────────────────────────────────
+function parseRow(line) {
+  const out = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQ) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') inQ = false;
+      else cur += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === ',') { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = parseRow(lines[0]);
+  const rows = lines.slice(1).map(line => {
+    const vals = parseRow(line);
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] ?? '').trim());
+    return obj;
+  });
+  return { headers, rows };
+}
+
+function csvEscape(s) {
+  s = String(s ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function writeCSV(headers, rows) {
+  const lines = [headers.map(csvEscape).join(',')];
+  rows.forEach((row, i) => {
+    const vals = headers.map(h => {
+      if (h === '#') return String(i + 1);
+      return csvEscape(row[h] ?? '');
+    });
+    lines.push(vals.join(','));
+  });
+  return lines.join('\n');
+}
+
+function downloadCSVs() {
+  const byBldg = {};
+  allEntries.forEach(e => {
+    const b = (e.Building || 'unknown').trim();
+    (byBldg[b] = byBldg[b] || []).push(e);
+  });
+  for (const [bldg, rows] of Object.entries(byBldg)) {
+    const headers = headersByBuilding[bldg] || DEFAULT_HEADERS;
+    const csv = writeCSV(headers, rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = bldg.replace(/\s+/g, '-') + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+}
+
+document.getElementById('dl').onclick = downloadCSVs;
+
+document.getElementById('files').onchange = async (ev) => {
+  for (const file of ev.target.files) {
+    const text = await file.text();
+    const { headers, rows } = parseCSV(text);
+    allEntries.push(...rows);
+    rows.forEach(r => {
+      if (r.Building) headersByBuilding[r.Building.trim()] = headers;
+    });
+  }
+  ev.target.value = '';
+  updateFilters();
+  updateBuildingDatalist();
+  render();
+  document.getElementById('dl').style.display = '';
+};
+
+// ── floors ───────────────────────────────────────────────────────
+function expandFloors(e) {
+  const f = (e.Floor || '').replace('–', '-').trim();
+  if (!f || f === '—') return [];
+  const m = f.match(/^(-?\d+)-(-?\d+)$/);
+  if (!m) return [f];
+  const out = [];
+  const a = +m[1], b = +m[2];
+  for (let i = Math.min(a, b); i <= Math.max(a, b); i++) out.push(String(i));
+  return out;
+}
+
+function floorMatches(e, filterFloor) {
+  if (!filterFloor) return true;
+  return expandFloors(e).includes(filterFloor);
+}
+
+// ── filters ──────────────────────────────────────────────────────
+function uniqSorted(arr) {
+  return [...new Set(arr.filter(v => v && v !== '—'))].sort((a, b) => {
+    const na = +a, nb = +b;
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+}
+
+function updateFilters() {
+  const bldgs = uniqSorted(allEntries.map(e => e.Building));
+  const floors = uniqSorted(allEntries.flatMap(expandFloors));
+  const bldgSel = document.getElementById('f-bldg');
+  const floorSel = document.getElementById('f-floor');
+  const prevB = bldgSel.value, prevF = floorSel.value;
+  bldgSel.innerHTML = '<option value="">all buildings</option>' +
+    bldgs.map(b => `<option>${b}</option>`).join('');
+  floorSel.innerHTML = '<option value="">all floors</option>' +
+    floors.map(f => `<option>${f}</option>`).join('');
+  if (bldgs.includes(prevB)) bldgSel.value = prevB;
+  if (floors.includes(prevF)) floorSel.value = prevF;
+}
+
+function updateBuildingDatalist() {
+  const bldgs = uniqSorted(allEntries.map(e => e.Building));
+  document.getElementById('bldg-list').innerHTML =
+    bldgs.map(b => `<option value="${b}">`).join('');
+}
+
+document.getElementById('f-bldg').onchange = render;
+document.getElementById('f-floor').onchange = render;
+
+// ── rendering ────────────────────────────────────────────────────
+function render() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  entryMarkers.clear();
+  clearRelLines();
+  hideInfo();
+  pinned = null;
+
+  const b = document.getElementById('f-bldg').value;
+  const f = document.getElementById('f-floor').value;
+  const filtered = allEntries.filter(e =>
+    (!b || e.Building === b) && floorMatches(e, f)
+  );
+  document.getElementById('count').textContent =
+    `${filtered.length} / ${allEntries.length}`;
+  filtered.forEach(addMarker);
+
+  if (filtered.length && !draftMarker && !routeLines.length) {
+    const pts = filtered.map(e => [+e.Latitude, +e.Longitude]);
+    map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 19 });
+  }
+
+  // If a route was drawn and its endpoints are still in the filtered set, redraw
+  if (routeStart && routeEnd) redrawRoute();
+}
+
+function addMarker(entry) {
+  const m = L.marker([+entry.Latitude, +entry.Longitude], {
+    icon: iconFor(entry),
+    draggable: true,
+  }).addTo(map);
+  if (!editMode) m.dragging.disable();
+
+  m.on('mouseover', () => {
+    if (pinned || routeMode) return;
+    showRelationships(entry);
+    showInfo(entry);
+  });
+  m.on('mouseout', () => {
+    if (pinned || routeMode) return;
+    clearRelLines();
+    hideInfo();
+  });
+  m.on('click', (ev) => {
+    L.DomEvent.stopPropagation(ev);
+    if (routeMode) {
+      handleRouteMarkerClick(entry);
+    } else if (editMode) {
+      openEditPanel(entry);
+    } else if (pinned === entry) {
+      pinned = null; clearRelLines(); hideInfo();
+    } else {
+      pinned = entry;
+      clearRelLines();
+      showRelationships(entry);
+      showInfo(entry);
+    }
+  });
+  m.on('dragend', () => {
+    const pos = m.getLatLng();
+    entry.Latitude = pos.lat;
+    entry.Longitude = pos.lng;
+    recomputeAllClosest();
+    if (editingEntry === entry) {
+      document.getElementById('d-lat').value = pos.lat.toFixed(6);
+      document.getElementById('d-lng').value = pos.lng.toFixed(6);
+    }
+    if (pinned === entry) {
+      clearRelLines();
+      showRelationships(entry);
+      showInfo(entry);
+    }
+    if (routeStart === entry || routeEnd === entry) redrawRoute();
+  });
+
+  markers.push(m);
+  entryMarkers.set(entry, m);
+}
+
+// ── lookups ──────────────────────────────────────────────────────
+function findEntrance(building, name) {
+  if (!name) return null;
+  const base = name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  return allEntries.find(e =>
+    e.Building === building && e.Kind === 'entrance' &&
+    (e.Room === name || e.Room === base)
+  );
+}
+
+function findConnector(building, room, subtype) {
+  if (!room) return null;
+  return allEntries.find(e =>
+    e.Building === building && e.Kind === 'connector' &&
+    e.Subtype === subtype && e.Room === room
+  );
+}
+
+// ── relationship lines (hover) ───────────────────────────────────
+function drawLine(srcLL, target, color) {
+  if (!target) return;
+  const line = L.polyline(
+    [srcLL, [+target.Latitude, +target.Longitude]],
+    { color, weight: 3, opacity: 0.85, dashArray: '5,6' }
+  ).addTo(map);
+  relLines.push(line);
+}
+
+function showRelationships(entry) {
+  const src = [+entry.Latitude, +entry.Longitude];
+  if (entry.Kind === 'room') {
+    const entField = preferElevator
+      ? 'Closest entrance (elevator)'
+      : 'Closest entrance';
+    drawLine(src, findEntrance(entry.Building, entry[entField]), '#5a9fff');
+    drawLine(src, findConnector(entry.Building, entry['Closest stair'], 'stairs'), '#daa520');
+    drawLine(src, findConnector(entry.Building, entry['Closest elevator'], 'elevator'), '#6af');
+  } else if (entry.Kind === 'connector') {
+    drawLine(src, findEntrance(entry.Building, entry['Closest entrance']), '#5a9fff');
+  }
+}
+
+function clearRelLines() {
+  relLines.forEach(l => map.removeLayer(l));
+  relLines = [];
+}
+
+// ── info panel ───────────────────────────────────────────────────
+function row(k, v) {
+  if (!v) return '';
+  return `<div class="k">${k}</div><div class="v">${v}</div>`;
+}
+
+function showInfo(e) {
+  const kind = e.Kind + (e.Subtype ? ` · ${e.Subtype}` : '');
+  const entViaStair = e['Closest entrance'];
+  const entViaElev = e['Closest entrance (elevator)'];
+  const preferred = preferElevator ? entViaElev : entViaStair;
+  const alternate = preferElevator ? entViaStair : entViaElev;
+  const altLabel = preferElevator ? 'via stair' : 'via elevator';
+  const entLine = (alternate && alternate !== preferred)
+    ? row('Closest entrance', preferred) +
+      row(`alternate (${altLabel})`, alternate)
+    : row('Closest entrance', preferred);
+
+  document.getElementById('info').innerHTML =
+    row('Kind', kind) + row('Building', e.Building) + row('Floor', e.Floor) +
+    row('Room', e.Room) + row('Orientation', e.Orientation) +
+    entLine +
+    row('Closest stair', e['Closest stair']) +
+    row('Closest elevator', e['Closest elevator']);
+  document.getElementById('info').style.display = 'block';
+}
+
+function hideInfo() {
+  document.getElementById('info').style.display = 'none';
+}
+
+// ── geometry ─────────────────────────────────────────────────────
+function haversineM(a, b) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]), lat2 = toRad(b[0]);
+  const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+const METERS_PER_FLOOR = 20;
+
+function floorDistance(source, target) {
+  const srcFloors = expandFloors(source).map(Number).filter(n => !isNaN(n));
+  const tgtFloors = expandFloors(target).map(Number).filter(n => !isNaN(n));
+  if (!srcFloors.length || !tgtFloors.length) return 0;
+  let best = Infinity;
+  for (const s of srcFloors) for (const t of tgtFloors) {
+    const d = Math.abs(s - t);
+    if (d < best) best = d;
+  }
+  return best === Infinity ? 0 : best;
+}
+
+function travelDistance(entry, candidate) {
+  const horizontal = haversineM(
+    [+entry.Latitude, +entry.Longitude],
+    [+candidate.Latitude, +candidate.Longitude]
+  );
+  const vertical = floorDistance(entry, candidate) * METERS_PER_FLOOR;
+  return horizontal + vertical;
+}
+
+function entranceFloors(building) {
+  const floors = new Set();
+  for (const e of allEntries) {
+    if (e.Building !== building || e.Kind !== 'entrance') continue;
+    for (const f of expandFloors(e)) {
+      const n = Number(f);
+      if (!isNaN(n)) floors.add(n);
+    }
+  }
+  return floors;
+}
+
+function sourceIsOnEntranceFloor(entry) {
+  const entFloors = entranceFloors(entry.Building);
+  return expandFloors(entry).map(Number).filter(n => !isNaN(n))
+    .some(f => entFloors.has(f));
+}
+
+function nearestEntranceToPoint(pos, building) {
+  let best = null, bestD = Infinity;
+  for (const e of allEntries) {
+    if (e.Building !== building || e.Kind !== 'entrance') continue;
+    const d = haversineM(pos, [+e.Latitude, +e.Longitude]);
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  return best ? best.Room : '';
+}
+
+function nearestByTravel(entry, filter) {
+  const bldg = entry.Building;
+  let best = null, bestD = Infinity;
+  for (const c of allEntries) {
+    if (c === entry || c.Building !== bldg || !filter(c)) continue;
+    const d = travelDistance(entry, c);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best;
+}
+
+function computeClosest(entry) {
+  entry['Closest entrance'] = '';
+  entry['Closest entrance (elevator)'] = '';
+  entry['Closest stair'] = '';
+  entry['Closest elevator'] = '';
+
+  if (entry.Kind === 'entrance') return;
+  const bldg = entry.Building;
+
+  if (entry.Kind === 'connector') {
+    entry['Closest entrance'] = nearestEntranceToPoint(
+      [+entry.Latitude, +entry.Longitude], bldg
+    );
+    return;
+  }
+
+  const closestStair = nearestByTravel(entry,
+    c => c.Kind === 'connector' && c.Subtype === 'stairs');
+  const closestElev = nearestByTravel(entry,
+    c => c.Kind === 'connector' && c.Subtype === 'elevator');
+
+  entry['Closest stair']    = closestStair ? closestStair.Room : '';
+  entry['Closest elevator'] = closestElev  ? closestElev.Room  : '';
+
+  if (sourceIsOnEntranceFloor(entry)) {
+    const direct = nearestEntranceToPoint(
+      [+entry.Latitude, +entry.Longitude], bldg
+    );
+    entry['Closest entrance'] = direct;
+    entry['Closest entrance (elevator)'] = direct;
+    return;
+  }
+
+  if (closestStair) {
+    entry['Closest entrance'] = closestStair['Closest entrance'] || '';
+  }
+  if (closestElev) {
+    entry['Closest entrance (elevator)'] = closestElev['Closest entrance'] || '';
+  }
+}
+
+function recomputeAllClosest() {
+  // Pass 1: non-rooms (connectors first, since rooms inherit from them).
+  for (const e of allEntries) if (e.Kind !== 'room') computeClosest(e);
+  // Pass 2: rooms, which read from connector fields just computed.
+  for (const e of allEntries) if (e.Kind === 'room') computeClosest(e);
+}
+
+// ── routing ──────────────────────────────────────────────────────
+function parseFloor(e) {
+  // Use the first numeric floor. For single-floor entries ("2"), that's it.
+  // For range entries ("1-4"), this is the range's minimum.
+  const floors = expandFloors(e).map(Number).filter(n => !isNaN(n));
+  return floors.length ? Math.min(...floors) : NaN;
+}
+
+function connectorReaches(c, floor) {
+  const floors = expandFloors(c).map(Number).filter(n => !isNaN(n));
+  return floors.includes(floor);
+}
+
+// Weight the start→connector leg less than the connector→end leg.
+// This biases selection toward connectors near the destination,
+// which makes "walk toward your destination, pass through a stair
+// on the way" feel natural. Raise END_WEIGHT to push harder.
+const START_WEIGHT = 1.0;
+const END_WEIGHT = 1.75;
+
+function pickBestConnector(start, end, subtype) {
+  const sf = parseFloor(start);
+  const ef = parseFloor(end);
+  const candidates = allEntries.filter(c =>
+    c.Kind === 'connector' &&
+    c.Subtype === subtype &&
+    c.Building === start.Building &&
+    connectorReaches(c, sf) &&
+    connectorReaches(c, ef)
+  );
+  if (!candidates.length) return null;
+  let best = null, bestCost = Infinity;
+  for (const c of candidates) {
+    const dStart = haversineM(
+      [+start.Latitude, +start.Longitude],
+      [+c.Latitude, +c.Longitude]
+    );
+    const dEnd = haversineM(
+      [+c.Latitude, +c.Longitude],
+      [+end.Latitude, +end.Longitude]
+    );
+    const cost = START_WEIGHT * dStart + END_WEIGHT * dEnd;
+    if (cost < bestCost) { bestCost = cost; best = c; }
+  }
+  return best;
+}
+
+function computeRoute(start, end) {
+  if (!start || !end) return null;
+  if (start === end) return { error: 'start and end are the same point' };
+  if (start.Building !== end.Building) {
+    return { error: 'different buildings (not yet supported)' };
+  }
+
+  const sf = parseFloor(start);
+  const ef = parseFloor(end);
+  if (isNaN(sf) || isNaN(ef)) return { error: 'invalid floor on start or end' };
+
+  if (sf === ef) {
+    const d = haversineM(
+      [+start.Latitude, +start.Longitude],
+      [+end.Latitude, +end.Longitude]
+    );
+    return {
+      legs: [{ from: start, to: end }],
+      sameFloor: true,
+      distance: d,
+    };
+  }
+
+  const primary = preferElevator ? 'elevator' : 'stairs';
+  const fallback = preferElevator ? 'stairs' : 'elevator';
+
+  let connector = pickBestConnector(start, end, primary);
+  let subtype = primary;
+  if (!connector) {
+    connector = pickBestConnector(start, end, fallback);
+    subtype = fallback;
+  }
+  if (!connector) {
+    return { error: `no ${primary} or ${fallback} reaches both floors` };
+  }
+
+  const distStart = haversineM(
+    [+start.Latitude, +start.Longitude],
+    [+connector.Latitude, +connector.Longitude]
+  );
+  const distEnd = haversineM(
+    [+connector.Latitude, +connector.Longitude],
+    [+end.Latitude, +end.Longitude]
+  );
+
+  return {
+    legs: [
+      { from: start, to: connector },
+      { from: connector, to: end },
+    ],
+    connector,
+    subtype,
+    fromFloor: sf,
+    toFloor: ef,
+    distance: distStart + distEnd,
+    usedFallback: subtype !== primary,
+  };
+}
+
+const ROUTE_COLOR = '#f39c12';
+
+function drawRouteLines(route) {
+  for (const leg of route.legs) {
+    const line = L.polyline([
+      [+leg.from.Latitude, +leg.from.Longitude],
+      [+leg.to.Latitude, +leg.to.Longitude],
+    ], { color: ROUTE_COLOR, weight: 4, opacity: 0.95 }).addTo(map);
+    routeLines.push(line);
+  }
+}
+
+function drawRing(entry, color) {
+  const ring = L.circleMarker(
+    [+entry.Latitude, +entry.Longitude],
+    { radius: 14, color, weight: 3, fill: false, interactive: false }
+  ).addTo(map);
+  routeRings.push(ring);
+}
+
+function clearRouteDrawing() {
+  routeLines.forEach(l => map.removeLayer(l));
+  routeLines = [];
+  routeRings.forEach(r => map.removeLayer(r));
+  routeRings = [];
+}
+
+function redrawRoute() {
+  clearRouteDrawing();
+  if (!routeStart || !routeEnd) return;
+  const route = computeRoute(routeStart, routeEnd);
+  updateRouteInfo(route);
+  if (route && !route.error) {
+    drawRouteLines(route);
+  }
+  if (routeStart) drawRing(routeStart, '#5a5');
+  if (routeEnd) drawRing(routeEnd, '#e74c3c');
+}
+
+function fmtEntry(e) {
+  const kind = e.Kind === 'connector'
+    ? (e.Subtype === 'elevator' ? 'elev' : 'stair')
+    : e.Kind;
+  return `${e.Building} · F${e.Floor} · ${kind}: ${e.Room || '—'}`;
+}
+
+function updateRouteInfo(route) {
+  const el = document.getElementById('route-info');
+  if (!route) {
+    el.classList.remove('error');
+    el.innerHTML = '<span class="empty">pick two points to compute a route</span>';
+    return;
+  }
+  if (route.error) {
+    el.classList.add('error');
+    el.textContent = route.error;
+    return;
+  }
+  el.classList.remove('error');
+  let body = '';
+  if (route.sameFloor) {
+    body = `Same floor · walk ${Math.round(route.distance)} m`;
+  } else {
+    const subLabel = route.subtype === 'elevator' ? 'elevator' : 'stairs';
+    body = `Via ${subLabel} "${route.connector.Room || '—'}" · floor ${route.fromFloor} → ${route.toFloor} · ${Math.round(route.distance)} m walking`;
+  }
+  if (route.usedFallback) {
+    const want = preferElevator ? 'elevator' : 'stairs';
+    body += `<div class="note">${want} unavailable — using ${route.subtype}</div>`;
+  }
+  el.innerHTML = body;
+}
+
+function setRouteStart(entry) {
+  routeStart = entry;
+  const v = document.getElementById('route-start-val');
+  const c = document.getElementById('route-start-clear');
+  v.textContent = fmtEntry(entry);
+  v.classList.remove('empty');
+  c.classList.remove('hidden');
+  redrawRoute();
+}
+
+function setRouteEnd(entry) {
+  routeEnd = entry;
+  const v = document.getElementById('route-end-val');
+  const c = document.getElementById('route-end-clear');
+  v.textContent = fmtEntry(entry);
+  v.classList.remove('empty');
+  c.classList.remove('hidden');
+  redrawRoute();
+}
+
+function clearRouteStart() {
+  routeStart = null;
+  const v = document.getElementById('route-start-val');
+  const c = document.getElementById('route-start-clear');
+  v.textContent = 'click a marker';
+  v.classList.add('empty');
+  c.classList.add('hidden');
+  redrawRoute();
+}
+
+function clearRouteEnd() {
+  routeEnd = null;
+  const v = document.getElementById('route-end-val');
+  const c = document.getElementById('route-end-clear');
+  v.textContent = 'click a marker';
+  v.classList.add('empty');
+  c.classList.add('hidden');
+  redrawRoute();
+}
+
+function handleRouteMarkerClick(entry) {
+  if (!routeStart) { setRouteStart(entry); return; }
+  if (!routeEnd) {
+    if (entry === routeStart) return;
+    setRouteEnd(entry);
+    return;
+  }
+  // Both filled — reset and treat this click as new start.
+  clearRouteEnd();
+  setRouteStart(entry);
+}
+
+document.getElementById('route-start-clear').onclick = clearRouteStart;
+document.getElementById('route-end-clear').onclick = clearRouteEnd;
+
+// ── date helpers ─────────────────────────────────────────────────
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(d) { return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
+function fmtTime(d) { return d.toTimeString().slice(0, 8); }
+
+// ── draft marker (add mode) ──────────────────────────────────────
+function setDraftLocation(lat, lng) {
+  draft.lat = lat; draft.lng = lng;
+  document.getElementById('d-lat').value = lat.toFixed(6);
+  document.getElementById('d-lng').value = lng.toFixed(6);
+  document.getElementById('loc-hint').textContent =
+    'location set — click elsewhere to move';
+  if (draftMarker) {
+    draftMarker.setLatLng([lat, lng]);
+  } else {
+    draftMarker = L.circleMarker([lat, lng], {
+      radius: 10, color: '#fff', weight: 2,
+      fillColor: '#e74c3c', fillOpacity: 0.55, dashArray: '3,3',
+    }).addTo(map);
+  }
+}
+
+function clearDraftMarker() {
+  if (draftMarker) { map.removeLayer(draftMarker); draftMarker = null; }
+  draft.lat = null; draft.lng = null;
+  document.getElementById('d-lat').value = '';
+  document.getElementById('d-lng').value = '';
+  document.getElementById('loc-hint').textContent =
+    'click the map to set a location';
+}
+
+// ── add/edit panel control ───────────────────────────────────────
+function openPanel(mode, entry) {
+  panelOpen = true;
+  panelMode = mode;
+  editingEntry = (mode === 'edit') ? entry : null;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('legend').classList.add('hidden');
+
+  const title = document.getElementById('panel-title');
+  const primary = document.getElementById('d-primary');
+  const del = document.getElementById('d-delete');
+  const hint = document.getElementById('loc-hint');
+
+  if (mode === 'add') {
+    title.textContent = 'Add point';
+    primary.textContent = 'Add point';
+    del.classList.add('hidden');
+    hint.textContent = 'click the map to set a location';
+    document.getElementById('toggle-add').classList.add('active');
+  } else {
+    title.textContent = 'Edit point';
+    primary.textContent = 'Save changes';
+    del.classList.remove('hidden');
+    hint.textContent = 'drag the marker to move, or type here';
+    draftFromEntry(entry);
+  }
+  syncKindUI();
+}
+
+function closePanel() {
+  panelOpen = false;
+  editingEntry = null;
+  document.getElementById('panel').classList.remove('open');
+  if (!routeMode) document.getElementById('legend').classList.remove('hidden');
+  document.getElementById('toggle-add').classList.remove('active');
+  clearDraftMarker();
+}
+
+function openAddPanel() { resetDraft(); syncDraftToForm(); openPanel('add', null); }
+function openEditPanel(entry) { openPanel('edit', entry); }
+
+document.getElementById('toggle-add').onclick = () => {
+  if (panelOpen && panelMode === 'add') closePanel();
+  else openAddPanel();
+};
+document.getElementById('panel-close').onclick = closePanel;
+
+// ── edit mode / route mode toggles (mutually exclusive) ──────────
+function toggleEditMode() {
+  if (routeMode) exitRouteMode();
+  editMode = !editMode;
+  markers.forEach(m => editMode ? m.dragging.enable() : m.dragging.disable());
+  document.getElementById('toggle-edit').classList.toggle('active', editMode);
+  if (!editMode && panelOpen && panelMode === 'edit') closePanel();
+  updateHint();
+}
+
+function enterRouteMode() {
+  if (editMode) toggleEditMode();
+  routeMode = true;
+  document.getElementById('route-panel').classList.add('open');
+  document.getElementById('toggle-route').classList.add('active');
+  document.getElementById('legend').classList.add('hidden');
+  if (pinned) { pinned = null; clearRelLines(); hideInfo(); }
+  updateHint();
+}
+
+function exitRouteMode() {
+  routeMode = false;
+  clearRouteStart();
+  clearRouteEnd();
+  clearRouteDrawing();
+  document.getElementById('route-panel').classList.remove('open');
+  document.getElementById('toggle-route').classList.remove('active');
+  if (!panelOpen) document.getElementById('legend').classList.remove('hidden');
+  updateHint();
+}
+
+function toggleRouteMode() { routeMode ? exitRouteMode() : enterRouteMode(); }
+
+document.getElementById('toggle-edit').onclick = toggleEditMode;
+document.getElementById('toggle-route').onclick = toggleRouteMode;
+document.getElementById('route-close').onclick = exitRouteMode;
+
+function updateHint() {
+  const hint = document.getElementById('hint');
+  if (routeMode) hint.textContent = 'route mode: click start, then end';
+  else if (editMode) hint.textContent = 'edit mode: drag markers, click to edit fields';
+  else hint.textContent = 'hover a node to see its closest links';
+}
+
+// ── elevator preference ──────────────────────────────────────────
+document.getElementById('prefer-elevator').onchange = (e) => {
+  preferElevator = e.target.checked;
+  if (pinned) {
+    clearRelLines();
+    showRelationships(pinned);
+    showInfo(pinned);
+  }
+  if (routeStart && routeEnd) redrawRoute();
+};
+
+// ── kind pills + form binding ────────────────────────────────────
+document.querySelectorAll('.kind-btn').forEach(btn => {
+  btn.onclick = () => { draft.kind = btn.dataset.k; syncKindUI(); };
+});
+
+function syncKindUI() {
+  document.querySelectorAll('.kind-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.k === draft.kind)
+  );
+  const k = draft.kind;
+  const lbl = document.getElementById('name-lbl');
+  const nameInput = document.getElementById('d-name');
+  document.getElementById('f-ori').classList.toggle('hidden', k !== 'entrance');
+  if (k === 'room') {
+    lbl.textContent = 'Room number';
+    nameInput.placeholder = 'e.g. 2016';
+  } else if (k === 'entrance') {
+    lbl.textContent = 'Entrance name';
+    nameInput.placeholder = 'e.g. Main, NE, Side';
+  } else if (k === 'stairs') {
+    lbl.textContent = 'Stairs label (optional)';
+    nameInput.placeholder = 'e.g. A, B, Main Stairs';
+  } else {
+    lbl.textContent = 'Elevator label (optional)';
+    nameInput.placeholder = 'e.g. Main, Back';
+  }
+}
+
+document.getElementById('d-bldg').oninput = e => draft.bldg = e.target.value;
+document.getElementById('d-floor').oninput = e => draft.floor = e.target.value;
+document.getElementById('d-name').oninput = e => draft.name = e.target.value;
+document.getElementById('d-ori').onchange = e => draft.ori = e.target.value;
+document.getElementById('d-notes').oninput = e => draft.notes = e.target.value;
+document.getElementById('d-lat').oninput = e => {
+  const v = parseFloat(e.target.value);
+  const lng = parseFloat(document.getElementById('d-lng').value);
+  if (isFinite(v) && isFinite(lng) && panelMode === 'add') setDraftLocation(v, lng);
+};
+document.getElementById('d-lng').oninput = e => {
+  const v = parseFloat(e.target.value);
+  const lat = parseFloat(document.getElementById('d-lat').value);
+  if (isFinite(v) && isFinite(lat) && panelMode === 'add') setDraftLocation(lat, v);
+};
+
+function resetDraft() {
+  draft.name = ''; draft.notes = ''; draft.lat = null; draft.lng = null;
+}
+
+function syncDraftToForm() {
+  document.getElementById('d-bldg').value = draft.bldg;
+  document.getElementById('d-floor').value = draft.floor;
+  document.getElementById('d-name').value = draft.name;
+  document.getElementById('d-ori').value = draft.ori;
+  document.getElementById('d-lat').value = draft.lat != null ? String(draft.lat) : '';
+  document.getElementById('d-lng').value = draft.lng != null ? String(draft.lng) : '';
+  document.getElementById('d-notes').value = draft.notes;
+}
+
+function draftFromEntry(entry) {
+  let k = entry.Kind;
+  if (entry.Kind === 'connector') {
+    k = entry.Subtype === 'elevator' ? 'elevator' : 'stairs';
+  }
+  draft.kind = k;
+  draft.bldg = entry.Building || '';
+  draft.floor = entry.Floor || '';
+  draft.name = entry.Room || '';
+  draft.ori = entry.Orientation || 'N';
+  draft.lat = +entry.Latitude;
+  draft.lng = +entry.Longitude;
+  draft.notes = entry.Notes || '';
+  syncDraftToForm();
+}
+
+function applyDraftToEntry(entry) {
+  const k = draft.kind;
+  const kind = (k === 'stairs' || k === 'elevator') ? 'connector' : k;
+  const subtype = (k === 'stairs') ? 'stairs' : (k === 'elevator') ? 'elevator' : '';
+  const defaultRoom = k === 'stairs' ? 'Stairs' : k === 'elevator' ? 'Elevator' : '';
+
+  const lat = parseFloat(document.getElementById('d-lat').value);
+  const lng = parseFloat(document.getElementById('d-lng').value);
+
+  entry.Kind = kind;
+  entry.Subtype = subtype;
+  entry.Orientation = k === 'entrance' ? draft.ori : '';
+  entry.Building = (draft.bldg || '').trim();
+  entry.Floor = (draft.floor || '').trim();
+  entry.Room = (draft.name || '').trim() || defaultRoom;
+  entry.Notes = draft.notes || '';
+  if (isFinite(lat)) entry.Latitude = lat;
+  if (isFinite(lng)) entry.Longitude = lng;
+}
+
+function validateDraft() {
+  const k = draft.kind;
+  const lat = parseFloat(document.getElementById('d-lat').value);
+  const lng = parseFloat(document.getElementById('d-lng').value);
+  if (!isFinite(lat) || !isFinite(lng)) { alert('Location required'); return false; }
+  if (!(draft.bldg || '').trim()) { alert('Building required'); return false; }
+  if (!(draft.floor || '').trim()) { alert('Floor required'); return false; }
+  if ((k === 'room' || k === 'entrance') && !(draft.name || '').trim()) {
+    alert(k === 'room' ? 'Room number required' : 'Entrance name required');
+    return false;
+  }
+  return true;
+}
+
+function saveNewEntry() {
+  if (!validateDraft()) return;
+  const now = new Date();
+  const entry = {
+    '#': '',
+    Kind: '', Subtype: '', Orientation: '', 'Closest entrance': '',
+    'Closest entrance (elevator)': '',
+    Building: '', Floor: '', Room: '', Latitude: 0, Longitude: 0, Notes: '',
+    'Closest stair': '', 'Closest elevator': '', 'Direction from connector': '',
+    Date: fmtDate(now), Time: fmtTime(now), Timestamp: now.toISOString(),
+  };
+  applyDraftToEntry(entry);
+  allEntries.push(entry);
+  if (!headersByBuilding[entry.Building]) {
+    headersByBuilding[entry.Building] = DEFAULT_HEADERS;
+  }
+  recomputeAllClosest();
+  resetDraft();
+  syncDraftToForm();
+  clearDraftMarker();
+  updateFilters();
+  updateBuildingDatalist();
+  render();
+  document.getElementById('dl').style.display = '';
+  document.getElementById('d-name').focus();
+}
+
+function saveEditedEntry() {
+  if (!editingEntry) return;
+  if (!validateDraft()) return;
+  applyDraftToEntry(editingEntry);
+  recomputeAllClosest();
+  updateFilters();
+  updateBuildingDatalist();
+  closePanel();
+  render();
+}
+
+function deleteCurrentEntry() {
+  if (!editingEntry) return;
+  if (!confirm('Delete this point?')) return;
+  const idx = allEntries.indexOf(editingEntry);
+  if (idx >= 0) allEntries.splice(idx, 1);
+  if (editingEntry === routeStart) clearRouteStart();
+  if (editingEntry === routeEnd) clearRouteEnd();
+  recomputeAllClosest();
+  closePanel();
+  updateFilters();
+  updateBuildingDatalist();
+  render();
+}
+
+document.getElementById('d-primary').onclick = () => {
+  if (panelMode === 'add') saveNewEntry();
+  else saveEditedEntry();
+};
+document.getElementById('d-delete').onclick = deleteCurrentEntry;
+
+document.getElementById('d-name').onkeydown = (e) => {
+  if (e.key === 'Enter') document.getElementById('d-primary').click();
+};
+</script>
+</body>
+</html>

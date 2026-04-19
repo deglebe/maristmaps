@@ -1,12 +1,22 @@
 import json
 import os
 from pathlib import Path
+import re
 
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, Response, abort, jsonify, render_template, request
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app import routing, trip
 from app.extensions import db
+from app.locations import (
+    find_entrance,
+    find_room,
+    list_buildings,
+    list_targets,
+    load_locations,
+    reset_locations_cache,
+)
 
 bp = Blueprint("main", __name__)
 
@@ -55,70 +65,46 @@ def index():
 
 @bp.route("/map")
 def map_only():
-    """Bare map view without the search overlay, for debugging / embedding."""
     return render_template("map.html", map_config=_map_page_config())
 
 
-# The `planet_osm_*` tables come from osm2pgsql's default.style (see
-# scripts/load-osm.sh). `way` is a geometry in EPSG:3857; we reproject the
-# centroid to 4326 for the client. Everything is wrapped in per-query
-# try/except so a missing table (e.g. before the first OSM import) just
-# contributes zero features instead of 500ing the whole endpoint.
+# ---------------------------------------------------------------------------
+# Features (unchanged)
+# ---------------------------------------------------------------------------
+
 _BUILDINGS_SQL = text(
     """
-    SELECT osm_id,
-           name,
-           building,
-           amenity,
+    SELECT osm_id, name, building, amenity,
            ST_X(ST_Transform(ST_Centroid(way), 4326)) AS lon,
            ST_Y(ST_Transform(ST_Centroid(way), 4326)) AS lat
     FROM planet_osm_polygon
-    WHERE building IS NOT NULL
-      AND name IS NOT NULL
-      AND trim(name) <> ''
+    WHERE building IS NOT NULL AND name IS NOT NULL AND trim(name) <> ''
     """
 )
 
 _POIS_SQL = text(
     """
-    SELECT osm_id,
-           name,
-           amenity,
-           shop,
-           tourism,
-           leisure,
-           office,
+    SELECT osm_id, name, amenity, shop, tourism, leisure, office,
            ST_X(ST_Transform(way, 4326)) AS lon,
            ST_Y(ST_Transform(way, 4326)) AS lat
     FROM planet_osm_point
-    WHERE name IS NOT NULL
-      AND trim(name) <> ''
-      AND (amenity IS NOT NULL
-           OR shop IS NOT NULL
-           OR tourism IS NOT NULL
-           OR leisure IS NOT NULL
-           OR office IS NOT NULL)
+    WHERE name IS NOT NULL AND trim(name) <> ''
+      AND (amenity IS NOT NULL OR shop IS NOT NULL OR tourism IS NOT NULL
+           OR leisure IS NOT NULL OR office IS NOT NULL)
     """
 )
 
-# Paths = pedestrian/bike/foot ways (not vehicle roads). Matches the
-# PATH_KINDS + STAIR_KINDS set rendered by the map style.
 _PATHS_SQL = text(
     """
-    SELECT osm_id,
-           name,
-           highway,
+    SELECT osm_id, name, highway,
            ST_X(ST_Transform(ST_Centroid(way), 4326)) AS lon,
            ST_Y(ST_Transform(ST_Centroid(way), 4326)) AS lat
     FROM planet_osm_line
-    WHERE name IS NOT NULL
-      AND trim(name) <> ''
-      AND highway IN (
-          'footway', 'path', 'pedestrian', 'cycleway',
-          'track', 'bridleway', 'corridor', 'steps'
-      )
+    WHERE name IS NOT NULL AND trim(name) <> ''
+      AND highway = ANY(:path_kinds)
     """
 )
+_PATH_KINDS_PARAM = list(routing.PATH_KINDS + routing.STAIR_KINDS)
 
 _BUILDING_POLYGON_BY_OSM_SQL = text(
     """
@@ -135,10 +121,9 @@ _BUILDING_POLYGON_BY_OSM_SQL = text(
 )
 
 
-def _safe_rows(sql):
-    """Run a read-only query; return [] on any SQL error (missing table, etc.)."""
+def _safe_rows(sql, params=None):
     try:
-        return list(db.session.execute(sql).mappings())
+        return list(db.session.execute(sql, params or {}).mappings())
     except SQLAlchemyError:
         db.session.rollback()
         return []
@@ -211,50 +196,29 @@ def _path_subtitle(row):
 
 @bp.route("/api/features")
 def api_features():
-    """All named buildings/paths/POIs on the campus map.
-
-    Client-side this is small enough (≲ a few thousand rows on a campus PBF)
-    to ship as one JSON payload and filter in the browser.
-    """
     features = []
-
     for row in _safe_rows(_BUILDINGS_SQL):
         lon, lat = row["lon"], row["lat"]
         if lon is None or lat is None:
             continue
-        features.append(
-            {
-                "id": f"way/{row['osm_id']}",
-                "osm_id": row["osm_id"],
-                "kind": "building",
-                "name": row["name"],
-                "subtitle": _building_subtitle(row),
-                "lon": float(lon),
-                "lat": float(lat),
-            }
-        )
-
+        features.append({
+            "id": f"way/{row['osm_id']}", "osm_id": row["osm_id"],
+            "kind": "building", "name": row["name"],
+            "subtitle": _building_subtitle(row),
+            "lon": float(lon), "lat": float(lat),
+        })
     for row in _safe_rows(_POIS_SQL):
         lon, lat = row["lon"], row["lat"]
         if lon is None or lat is None:
             continue
-        features.append(
-            {
-                "id": f"node/{row['osm_id']}",
-                "osm_id": row["osm_id"],
-                "kind": "poi",
-                "name": row["name"],
-                "subtitle": _poi_subtitle(row),
-                "lon": float(lon),
-                "lat": float(lat),
-            }
-        )
-
-    # Paths tend to show up as many short segments per named way; collapse
-    # duplicates by name so the search list doesn't have ten "Main Walk"
-    # entries. Keep the first centroid we saw — good enough for fly-to.
+        features.append({
+            "id": f"node/{row['osm_id']}", "osm_id": row["osm_id"],
+            "kind": "poi", "name": row["name"],
+            "subtitle": _poi_subtitle(row),
+            "lon": float(lon), "lat": float(lat),
+        })
     seen_path_names = set()
-    for row in _safe_rows(_PATHS_SQL):
+    for row in _safe_rows(_PATHS_SQL, {"path_kinds": _PATH_KINDS_PARAM}):
         name = row["name"]
         if name in seen_path_names:
             continue
@@ -275,6 +239,198 @@ def api_features():
         )
 
     _apply_building_name_overrides(features)
-
+    
     features.sort(key=lambda f: (f["kind"], (f["name"] or "").lower()))
     return jsonify({"features": features, "count": len(features)})
+
+
+@bp.route("/api/indoor/index")
+def api_indoor_index():
+    """Flat list of indoor search targets: rooms, entrances, and
+    buildings. The client does fuzzy matching in-browser; we just ship
+    the data.
+
+    Each target looks like:
+        {
+          "kind": "room" | "entrance" | "building",
+          "label": "1021",
+          "sublabel": "Hancock · Floor 1",
+          "building": "Hancock",
+          "room": "1021",                 # present on room/entrance
+          "floor": "1",                   # present on room
+          "tokens": ["hancock", "1021"],  # all lowercased search strings
+          "endpoint": { ... }             # opaque payload for /api/route
+        }
+    """
+    return jsonify({
+        "targets": list_targets(),
+        "buildings": list_buildings(),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Routing
+# ---------------------------------------------------------------------------
+
+
+def _parse_lonlat_optional(prefix: str) -> tuple[float, float] | None:
+    raw_lon = request.args.get(f"{prefix}_lon")
+    raw_lat = request.args.get(f"{prefix}_lat")
+    if raw_lon is None and raw_lat is None:
+        return None
+    if raw_lon is None or raw_lat is None:
+        abort(400, description=f"need both {prefix}_lon and {prefix}_lat")
+    try:
+        lon = float(raw_lon)
+        lat = float(raw_lat)
+    except (TypeError, ValueError):
+        abort(400, description=f"invalid {prefix}_lon / {prefix}_lat")
+    if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+        abort(400, description=f"{prefix} coordinates out of range")
+    return lon, lat
+
+
+def _resolve_endpoint(prefix: str) -> trip.Endpoint:
+    """Turn query-string params into a trip.Endpoint.
+
+    Precedence (highest first):
+      <prefix>_kind=room      + <prefix>_building + <prefix>_room
+      <prefix>_kind=entrance  + <prefix>_building + <prefix>_name
+      <prefix>_kind=building  + <prefix>_building
+      <prefix>_building + <prefix>_room   (back-compat: implies kind=room)
+      <prefix>_lon + <prefix>_lat        (outdoor point)
+
+    Returning a typed Endpoint up-front keeps trip.py agnostic of the
+    wire format.
+    """
+    kind = (request.args.get(f"{prefix}_kind") or "").strip().lower()
+    building = (request.args.get(f"{prefix}_building") or "").strip()
+    room = (request.args.get(f"{prefix}_room") or "").strip()
+    name = (request.args.get(f"{prefix}_name") or "").strip()
+    label = request.args.get(f"{prefix}_label") or None
+
+    # Infer kind when client sent only building+room (back-compat with
+    # the previous frontend).
+    if not kind and building and room:
+        kind = "room"
+    if not kind and building and not room and not name:
+        # Bare building param with no room — treat as building endpoint.
+        # (Previously this would 400.)
+        kind = "building"
+
+    if kind == "room":
+        if not building or not room:
+            abort(400, description=f"{prefix}: room endpoint needs building + room")
+        loc = find_room(building, room)
+        if loc is None:
+            abort(404, description=f"no room {room!r} in {building!r}")
+        return trip.Endpoint(room=loc, label=label or f"{loc.building} {loc.room}")
+
+    if kind == "entrance":
+        if not building or not name:
+            abort(400, description=f"{prefix}: entrance endpoint needs building + name")
+        loc = find_entrance(building, name)
+        if loc is None:
+            abort(404, description=f"no entrance {name!r} in {building!r}")
+        return trip.Endpoint(
+            entrance=loc,
+            label=label or f"{loc.building} {loc.room or 'entrance'}",
+        )
+
+    if kind == "building":
+        if not building:
+            abort(400, description=f"{prefix}: building endpoint needs building")
+        return trip.Endpoint(building=building, label=label or building)
+
+    # Fall through to outdoor lat/lon.
+    latlon = _parse_lonlat_optional(prefix)
+    if latlon is None:
+        abort(400, description=f"missing {prefix} endpoint")
+    return trip.Endpoint(latlon=latlon, label=label)
+
+
+def _prefer_elevator_flag() -> bool:
+    v = (request.args.get("prefer_elevator") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
+def _compute_trip_from_request() -> dict:
+    start = _resolve_endpoint("from")
+    end = _resolve_endpoint("to")
+    locations = load_locations()
+    try:
+        return trip.plan_trip(
+            start, end, locations,
+            prefer_elevator=_prefer_elevator_flag(),
+        )
+    except trip.TripError as err:
+        abort(422, description=str(err))
+
+
+@bp.route("/api/route")
+def api_route():
+    """Unified indoor + outdoor routing. See _resolve_endpoint for params."""
+    return jsonify(_compute_trip_from_request())
+
+
+_FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _safe_filename_part(label: str | None, fallback: str) -> str:
+    cleaned = _FILENAME_SAFE.sub("_", (label or "").strip()).strip("._-")
+    return cleaned or fallback
+
+
+@bp.route("/api/route.gpx")
+def api_route_gpx():
+    plan = _compute_trip_from_request()
+    origin_label = plan.get("origin_label")
+    destination_label = plan.get("destination_label")
+    filename_bits = [
+        _safe_filename_part(origin_label, "start"),
+        "to",
+        _safe_filename_part(destination_label, "end"),
+    ]
+    filename = "_".join(filename_bits)[:120] + ".gpx"
+    trackpoints = [tuple(p) for p in plan["trackpoints"]]
+    if len(trackpoints) < 2:
+        abort(422, description="empty route")
+    synthetic = routing.Route(
+        trackpoints=trackpoints,
+        distance_m=plan["distance_m"],
+        duration_s=plan["duration_s"],
+        origin=trackpoints[0],
+        destination=trackpoints[-1],
+        origin_label=origin_label,
+        destination_label=destination_label,
+    )
+    xml = routing.route_to_gpx(
+        synthetic,
+        name=f"{origin_label or 'Start'} → {destination_label or 'End'}",
+    )
+    return Response(
+        xml,
+        mimetype="application/gpx+xml",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@bp.route("/api/route/debug")
+def api_route_debug():
+    stats = routing.debug_stats()
+    locs = load_locations()
+    stats["locations_total"] = len(locs)
+    stats["locations_by_kind"] = {}
+    for e in locs:
+        stats["locations_by_kind"][e.kind] = stats["locations_by_kind"].get(e.kind, 0) + 1
+    return jsonify(stats)
+
+
+@bp.route("/api/route/rebuild", methods=["POST"])
+def api_route_rebuild():
+    routing.reset_graph_cache()
+    reset_locations_cache()
+    return jsonify({"ok": True})
