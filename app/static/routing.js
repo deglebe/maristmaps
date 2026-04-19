@@ -1,16 +1,18 @@
 /* Routing engine (client half).
  *
- * Sends requests to /api/route in one of two shapes per side:
- *   Indoor (from MaristIndoor.snapshot()):
- *     ?from_kind=room&from_building=Hancock&from_room=1021
- *     ?from_kind=entrance&from_building=Dyson&from_name=Main
- *     ?from_kind=building&from_building=Hancock
- *   Outdoor (from MaristRoute state set by sidebar clicks / right-click menu):
- *     ?from_lon=...&from_lat=...
+ * Owns:
+ *  - The `window.MaristRoute` API used by the sidebar (search.js) to set
+ *    endpoints, swap, clear, and export GPX.
+ *  - The MapLibre source/layers that render the computed route as a
+ *    white-cased blue line plus two endpoint dots.
+ *  - Calls to /api/route and /api/route.gpx.
  *
- * Indoor wins on each side (server does the same). Anything set via
- * MaristIndoor.setSide fires through `mmap:indoor-changed`, which we
- * listen for to re-request.
+ * Deliberately owns no sidebar DOM. Whenever state changes, we dispatch
+ * `mmap:route-changed` on `document` with the current {from, to, route}
+ * snapshot. The sidebar listens for that event to reflect inputs, the
+ * summary line, and the Export GPX button state.
+ *
+ * Waits for `MaristMap.ready` before touching the map.
  */
 (function () {
   const ROUTE_SOURCE = 'mm-route';
@@ -20,10 +22,10 @@
   const ROUTE_ENDPOINTS_LAYER = 'mm-route-endpoints-layer';
 
   const state = {
-    from: null,     // { lon, lat, label } — outdoor point only
-    to: null,
-    route: null,
-    inflight: null,
+    from: null,    // { lon, lat, label }
+    to: null,      // { lon, lat, label }
+    route: null,   // server response from /api/route
+    inflight: null, // AbortController for the current /api/route call
   };
 
   let _map = null;
@@ -117,17 +119,7 @@
   }
 
   // ---- connector / door markers ---------------------------------------
-  //
-  // For every step along the route that involves a physical transition
-  // (entering a building, going up stairs, using an elevator), we drop a
-  // maplibregl.Marker at the step's location. Markers are DOM elements
-  // so we can use the SVGs from MaristIndoor.icons verbatim without
-  // having to rasterize them for a symbol layer.
-  //
-  // Why Markers instead of a symbol layer: routes are short (a handful
-  // of connectors at most), setup is trivial, and the icons stay crisp
-  // at any zoom since they're real DOM. The downside — no collision /
-  // fade-by-zoom — doesn't matter here.
+
 
   const connectorMarkers = [];
 
@@ -138,10 +130,6 @@
     }
   }
 
-  /** Should this step get a map marker? Excludes steps whose location
-   * would overlap the green/red endpoint dots (exit_room at start,
-   * arrive at end) and duplicates of change_floor (exit_connector
-   * shares the connector's coordinates). */
   function stepWarrantsMapMarker(step, isFirstStep, isLastStep) {
     if (isFirstStep) return false;         // overlaps start dot
     if (isLastStep) return false;          // overlaps end dot
@@ -166,7 +154,6 @@
     if (!indoor || !indoor.icons) return;
 
     // Flatten steps with a running first/last marker so the renderer
-    // knows when to skip endpoints.
     const allSteps = [];
     for (const phase of route.phases) {
       for (const step of (phase.steps || [])) allSteps.push(step);
