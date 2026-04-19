@@ -11,6 +11,7 @@ Works by using our I* optimized pathing
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 
 
@@ -488,6 +489,32 @@ def format_distance(meters: float) -> str:
     return f"about {ft_rounded} feet ({round(meters)} m)"
 
 
+# Longest compass codes first so the alternation matches NW before N, etc.
+_COMPASS_RE = re.compile(r"\b(NW|NE|SE|SW|N|S|E|W)\b")
+_COMPASS_WORDS: dict[str, str] = {
+    "NW": "North West",
+    "NE": "North East",
+    "SE": "South East",
+    "SW": "South West",
+    "N": "North",
+    "S": "South",
+    "E": "East",
+    "W": "West",
+}
+
+
+def expand_compass_for_speech(text: str) -> str:
+    """Expand compass abbreviations for voice (e.g. ``NE`` → ``North East``)."""
+
+    if not text:
+        return text
+
+    def _sub(m: re.Match[str]) -> str:
+        return _COMPASS_WORDS.get(m.group(1), m.group(0))
+
+    return _COMPASS_RE.sub(_sub, text)
+
+
 def _turn_into_hallway(turn: str) -> str:
     return {
         "left": "turn left into the hallway",
@@ -843,6 +870,19 @@ def route_entrance_to_room(
         start_mode="entrance_enter", end_mode="room",
     )
 
+def route_entrance_to_entrance(
+    start_entrance: LocationRow,
+    end_entrance: LocationRow,
+    locations: list[LocationRow],
+    *,
+    prefer_elevator: bool = False,
+) -> RoutePhase:
+    """Enter building at one entrance, exit at another.
+    """
+    return _route_indoor(
+        start_entrance, end_entrance, locations, prefer_elevator,
+        start_mode="entrance_enter", end_mode="entrance_exit",
+    )
 
 # --- json serialization ------------------------------------------------------
 
@@ -868,7 +908,7 @@ def phase_to_dict(phase: RoutePhase) -> dict:
 def step_to_dict(s: Step) -> dict:
     return {
         "kind": s.kind,
-        "text": s.text,
+        "text": expand_compass_for_speech(s.text),
         "polyline": [list(p) for p in s.polyline],
         "distance_m": s.distance_m,
         "connector_name": s.connector_name,

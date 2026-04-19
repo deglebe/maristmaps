@@ -253,12 +253,12 @@ def navigate(
     stash_navigation_plan(plan)
     origin = plan.get("origin_label") or "Start"
     dest = plan.get("destination_label") or "Destination"
-    dist = plan.get("distance_m")
-    dist_s = f"{int(round(dist))} m" if isinstance(dist, (int, float)) else ""
     out = (
-        f"ROUTE_OK: Planned route from {origin} to {dest}"
-        + (f" ({dist_s})" if dist_s else "")
-        + ". Summarize the trip briefly for the user."
+        f"ROUTE_OK: Planned route from {origin} to {dest}. "
+        "Reply with ONE short friendly sentence only. Do not give distances "
+        "(meters, feet, miles), do not list steps or turn-by-turn directions, "
+        "and do not repeat wording from step-by-step instructions — the app "
+        "shows the route separately."
     )
     log.info("tool_navigate success return_preview=%r", trunc_preview(out, 500))
     return out
