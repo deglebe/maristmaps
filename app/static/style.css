@@ -437,6 +437,44 @@ body.map-view #map {
   font-size: 11px;
 }
 
+.maplibregl-popup-content .popup-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.maplibregl-popup-content .popup-action {
+  flex: 1 1 auto;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #1a73e8;
+  border-radius: 6px;
+  padding: 0.35rem 0.55rem;
+  font: 600 12px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.maplibregl-popup-content .popup-action:hover,
+.maplibregl-popup-content .popup-action:focus-visible {
+  background: #eef4ff;
+  border-color: #1a73e8;
+  outline: none;
+}
+
+.maplibregl-popup-content .popup-action--to {
+  background: #1a73e8;
+  color: #fff;
+  border-color: #1a73e8;
+}
+
+.maplibregl-popup-content .popup-action--to:hover,
+.maplibregl-popup-content .popup-action--to:focus-visible {
+  background: #1664c4;
+  border-color: #1664c4;
+  color: #fff;
+}
+
 .maplibregl-popup-content table.attrs {
   border-collapse: collapse;
   width: 100%;
