@@ -478,7 +478,7 @@ def api_route_rebuild():
 
 
 # ---------------------------------------------------------------------------
-# OpenAI / LangChain agent (API only — no voice UI required on main)
+# OpenAI / LangChain agent (HTTP API + optional voice client in search.js)
 # ---------------------------------------------------------------------------
 
 
@@ -505,7 +505,15 @@ def api_agent_transcribe():
 
 @bp.route("/api/agent", methods=["POST"])
 def api_agent():
-    """Run the navigation agent: JSON ``message`` and optional start hints."""
+    """Run the navigation agent: JSON body with ``message`` and optional start hints.
+
+    Session: conversation is stored in the Flask session so follow-ups keep context.
+    Send ``reset: true`` to start a new conversation.
+
+    Response ``response_code`` / ``response_code_numeric``:
+      ``CLARIFICATION_PENDING`` / 1 — needs more info; ``reopen_mic`` is true.
+      ``ROUTE_READY`` / 2 — a route was computed; ``reopen_mic`` is false.
+    """
     if not os.environ.get("OPENAI_API_KEY"):
         abort(503, description="OPENAI_API_KEY is not configured")
     data = request.get_json(silent=True)

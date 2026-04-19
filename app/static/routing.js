@@ -364,7 +364,7 @@
       const params = buildRouteParams();
       window.location.href = `/api/route.gpx?${params.toString()}`;
     },
-    /** Apply route JSON from POST /api/agent (same shape as /api/route). */
+    /** Apply a route JSON object from POST /api/agent (same shape as /api/route). */
     setRouteFromServer(route) {
       if (!route) return;
       if (state.inflight) state.inflight.abort();

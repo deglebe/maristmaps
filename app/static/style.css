@@ -227,6 +227,16 @@ body.app-shell--map .flash {
   color: #202124;
 }
 
+.search-icon-btn.search-voice-btn--recording {
+  color: #c5221f;
+  background: #fce8e6;
+  cursor: pointer;
+}
+
+.search-icon-btn.search-voice-btn--recording:hover {
+  background: #fad2cf;
+}
+
 .search-results {
   list-style: none;
   margin: 0;
