@@ -24,6 +24,10 @@ def create_app() -> Flask:
     # Auth routes are temporarily disabled.
     # app.register_blueprint(auth_bp)
 
+    from agent.service import init_agent
+
+    init_agent(app)
+
     with app.app_context():
         db.create_all()
 
