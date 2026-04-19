@@ -14,7 +14,7 @@ from openai import OpenAI
 from agent.logutil import get_logger, trunc_preview
 from agent.nav_context import reset_navigation_result, take_navigation_plan
 from agent.prompts import BITCH_MODE_SYSTEM_PROMPT, SYSTEM_PROMPT
-from agent.tools import navigate
+from agent.tools import find_place, navigate
 from app.locations import list_buildings
 
 log = get_logger("service")
@@ -28,13 +28,28 @@ def _bitch_mode_enabled() -> bool:
     return v in ("1", "true", "yes", "on")
 
 
-def _buildings_hint() -> str:
-    names = list_buildings()
-    if not names:
-        return ""
-    shown = names[:40]
-    tail = "" if len(names) <= len(shown) else f", … (+{len(names) - len(shown)} more)"
-    return "Known buildings include: " + ", ".join(shown) + tail + "."
+def _places_hint() -> str:
+    """Tell the model which buildings have indoor (room-level) data.
+
+    Off-map places (other campus buildings, neighboring shops, POIs) are
+    NOT enumerated here — the catalog is too large and grows with OSM
+    imports. The model resolves those by calling ``find_place`` (or
+    just letting ``navigate`` do its own OSM fallback).
+    """
+    indoor = list_buildings()
+    if not indoor:
+        return (
+            "No indoor buildings are mapped yet. For any destination, call "
+            "`find_place` first to confirm the name resolves on the map."
+        )
+    return (
+        "Indoor buildings (these support `destination_room` / `current_room`): "
+        + ", ".join(indoor)
+        + ". Any other place name (off-campus shops, restaurants, parks, "
+        "unmapped campus buildings, etc.) is resolved at tool time — pass it "
+        "as `destination_building` (no room) or call `find_place` first if "
+        "the request is vague or ambiguous."
+    )
 
 
 def get_agent_graph():
@@ -47,10 +62,10 @@ def get_agent_graph():
         raise RuntimeError("OPENAI_API_KEY is not set")
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=api_key)
     base = BITCH_MODE_SYSTEM_PROMPT if want == "bitch" else SYSTEM_PROMPT
-    system = base.strip() + "\n\n" + _buildings_hint()
+    system = base.strip() + "\n\n" + _places_hint()
     _graph = create_agent(
         model=llm,
-        tools=[navigate],
+        tools=[find_place, navigate],
         system_prompt=system,
     )
     _graph_mode = want
@@ -90,20 +105,80 @@ def _format_user_message(
 ) -> str:
     parts = [f"User request:\n{text.strip()}"]
     loc_lines = []
+    coords_ok = False
     if from_lon is not None and from_lat is not None:
         try:
-            loc_lines.append(f"- Map coordinates (lon, lat): {float(from_lon)}, {float(from_lat)}")
+            loc_lines.append(
+                f"- Map coordinates (lon, lat): {float(from_lon)}, {float(from_lat)}"
+            )
+            coords_ok = True
         except (TypeError, ValueError):
             pass
     if from_label:
         loc_lines.append(f"- Map label: {from_label}")
     if loc_lines:
-        parts.append("Current location context:\n" + "\n".join(loc_lines))
+        block = "Current location context:\n" + "\n".join(loc_lines)
+        if coords_ok:
+            block += (
+                "\n\nUsing this context block (FALLBACK ONLY): if the user "
+                "did NOT explicitly name a starting building or room in "
+                "their request, treat these map coordinates as the start "
+                "and pass them to navigate as current_lon and current_lat. "
+                "If the user DID name a start (e.g. \"from Hancock 2020 "
+                "...\"), pass current_building / current_room from the "
+                "user's words and ignore these coordinates. Either way, do "
+                "NOT ask the user where they are starting from."
+            )
+        parts.append(block)
     else:
         parts.append(
-            "Current location context: not provided — ask where they are if you need it for routing."
+            "Current location context: not provided — ask where they are if you "
+            "need it for routing."
         )
     return "\n\n".join(parts)
+
+
+def _had_navigate_tool_call(messages: list) -> bool:
+    """True iff the model attempted ``navigate`` (the tool that actually
+    plans a trip). ``find_place`` lookups don't count — calling only that
+    means the model gathered info but never committed.
+    """
+    for m in messages:
+        if isinstance(m, AIMessage):
+            for tc in (m.tool_calls or []):
+                if (tc.get("name") or "").lower() == "navigate":
+                    return True
+        if isinstance(m, ToolMessage) and (m.name or "").lower() == "navigate":
+            return True
+    return False
+
+
+def looks_like_question(text: str) -> bool:
+    """A reply that genuinely asks for clarification.
+
+    We accept either a literal '?' (the prompts demand one for any
+    clarification) or the assistant explicitly asking for a missing field.
+    """
+    if not text:
+        return False
+    s = text.strip()
+    if "?" in s:
+        return True
+    low = s.lower()
+    cues = (
+        "what building",
+        "which building",
+        "what room",
+        "which room",
+        "where are you",
+        "where do you",
+        "tell me",
+        "let me know",
+        "could you say",
+        "please say",
+        "please tell",
+    )
+    return any(c in low for c in cues)
 
 
 def _last_ai_text(messages: list) -> str:
@@ -265,22 +340,51 @@ def run_agent_turn(
     )
     log.debug("agent_turn_formatted_user_block=%r", trunc_preview(user_content, 2000))
 
-    result = graph.invoke({
-        "messages": prior + [HumanMessage(content=user_content)],
-    })
+    initial_messages = prior + [HumanMessage(content=user_content)]
+    result = graph.invoke({"messages": initial_messages})
     messages = result.get("messages") or []
     _log_langgraph_messages(messages)
 
     reply = _last_ai_text(messages)
-    if not reply:
-        reply = "Please say where you'd like to go and, if you can, where you're starting from."
-
     plan = take_navigation_plan()
+
+    # The model sometimes whiffs: it produces a conversational reply like
+    # "Sure, let me plan that for you" without ever calling `navigate`. That
+    # confuses the voice loop (no plan, but no real question to answer either).
+    # When that happens, nudge it once and retry.
+    if (
+        plan is None
+        and not _had_navigate_tool_call(messages)
+        and reply
+        and not looks_like_question(reply)
+    ):
+        log.warning(
+            "agent_turn_no_tool_no_question retrying with nudge reply_preview=%r",
+            trunc_preview(reply, 300),
+        )
+        nudge = SystemMessage(content=(
+            "You just replied without calling the `navigate` tool and without "
+            "asking the user a clarifying question. That is not allowed. "
+            "Either call `navigate` now with the destination and any starting "
+            "point you have (the user's map coordinates count as a starting "
+            "point), or reply with ONE specific clarifying question that ends "
+            "in '?'. Do not say 'planning your trip' or any similar filler."
+        ))
+        retry_messages = list(messages) + [nudge]
+        result = graph.invoke({"messages": retry_messages})
+        messages = result.get("messages") or messages
+        _log_langgraph_messages(messages)
+        reply = _last_ai_text(messages) or reply
+        plan = take_navigation_plan()
+
+    if not reply:
+        reply = (
+            "Please say where you'd like to go and, if you can, where you're "
+            "starting from."
+        )
     audio: bytes | None = None
-    if plan is None and reply:
+    if reply:
         audio = text_to_speech_mp3(reply)
-    elif plan is not None:
-        log.info("agent_turn_skip_tts reason=route_computed")
 
     stored = flatten_messages_for_replay(_without_system(messages))
     log.info(

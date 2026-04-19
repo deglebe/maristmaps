@@ -8,13 +8,72 @@ from agent.logutil import get_logger, trunc_preview
 from app import trip
 from app.locations import (
     find_room,
+    list_buildings,
     load_locations,
     normalize_room_code,
     resolve_building_for_agent,
 )
+from app.osm_features import find_osm_destination, list_osm_destinations
 from agent.nav_context import stash_navigation_plan
 
 log = get_logger("tools")
+
+
+@tool
+def find_place(query: str, limit: int = 5) -> str:
+    """Look up whether a free-text place name matches a known map location.
+
+    Use this BEFORE `navigate` when you are not sure a name will resolve,
+    when the request is ambiguous (e.g. just "the gym"), or when you want
+    to disambiguate between several similar names. Returns up to `limit`
+    matches with their kind so you can pick the right one and pass its
+    exact name to `navigate`.
+
+    The matcher checks indoor buildings (rooms available) first, then
+    falls back to OSM-known places (other campus buildings, off-campus
+    shops/restaurants/POIs).
+
+    Returns:
+      "PLACES_FOUND: <kind:name (subtitle)>; <kind:name (subtitle)>; ..."
+      or "PLACES_NONE: <reason>" when nothing matches.
+    """
+    raw = (query or "").strip()
+    if not raw:
+        return "PLACES_NONE: Empty query."
+    cap = max(1, min(int(limit or 5), 10))
+
+    out: list[str] = []
+    rlow = raw.lower()
+    indoor = list_buildings()
+
+    indoor_hits = [b for b in indoor if rlow in b.lower() or b.lower() in rlow]
+    indoor_hits.sort(key=lambda b: (len(b), b.lower()))
+    for b in indoor_hits[:cap]:
+        out.append(f"indoor_building:{b} (rooms available)")
+
+    if len(out) < cap:
+        seen_lower = {b.lower() for b in indoor_hits}
+        osm_hits = []
+        for f in list_osm_destinations():
+            n = (f.name or "").strip()
+            if not n or n.lower() in seen_lower:
+                continue
+            nl = n.lower()
+            if rlow in nl or nl in rlow or all(t in nl for t in rlow.split() if t):
+                osm_hits.append(f)
+        osm_hits.sort(key=lambda f: (len(f.name), f.name.lower()))
+        for f in osm_hits[: cap - len(out)]:
+            sub = f.subtitle or f.kind
+            out.append(f"{f.kind}:{f.name} ({sub})")
+
+    if not out:
+        msg = f"PLACES_NONE: No place matched {raw!r}."
+        log.info("tool_find_place miss query=%r", raw)
+        return msg
+
+    res = "PLACES_FOUND: " + "; ".join(out)
+    log.info("tool_find_place hits query=%r preview=%r", raw, trunc_preview(res, 400))
+    return res
 
 
 @tool
@@ -52,32 +111,56 @@ def navigate(
         current_lat,
         prefer_elevator,
     )
-    dest_b = resolve_building_for_agent((destination_building or "").strip())
-    if not dest_b:
+    raw_dest = (destination_building or "").strip()
+    if not raw_dest:
         log.warning("tool_navigate fail: missing destination building")
         return "NAVIGATION_FAILED: Destination building is missing."
 
     locations = load_locations()
+    indoor_buildings = {b.lower() for b in list_buildings()}
     dest_room = normalize_room_code(destination_room) or None
+
+    dest_b = resolve_building_for_agent(raw_dest)
+    dest_is_indoor = dest_b.lower() in indoor_buildings
+
     log.info(
-        "tool_navigate resolved dest_building=%r dest_room=%r locations_loaded=%s",
+        "tool_navigate resolved dest_building=%r dest_room=%r dest_is_indoor=%s locations_loaded=%s",
         dest_b,
         dest_room,
+        dest_is_indoor,
         len(locations),
     )
 
-    if dest_room:
-        room_row = find_room(dest_b, dest_room)
-        if room_row is None:
-            msg = (
-                f"NAVIGATION_FAILED: No room {dest_room!r} found in building {dest_b!r}. "
-                "Ask the user for the exact building and room as shown on the door or directory."
-            )
-            log.warning("tool_navigate fail: find_room miss %s", trunc_preview(msg, 400))
-            return msg
-        end = trip.Endpoint(room=room_row, label=f"{room_row.building} {room_row.room}")
+    if dest_is_indoor:
+        if dest_room:
+            room_row = find_room(dest_b, dest_room)
+            if room_row is None:
+                msg = (
+                    f"NAVIGATION_FAILED: No room {dest_room!r} found in building {dest_b!r}. "
+                    "Ask the user for the exact building and room as shown on the door or directory."
+                )
+                log.warning("tool_navigate fail: find_room miss %s", trunc_preview(msg, 400))
+                return msg
+            end = trip.Endpoint(room=room_row, label=f"{room_row.building} {room_row.room}")
+        else:
+            end = trip.Endpoint(building=dest_b, label=dest_b)
     else:
-        end = trip.Endpoint(building=dest_b, label=dest_b)
+        # Off-campus or campus-but-not-indoor-mapped: fall back to OSM lookup.
+        feat = find_osm_destination(raw_dest)
+        if feat is None:
+            msg = (
+                f"NAVIGATION_FAILED: Could not find a place named {raw_dest!r} on the map. "
+                "Ask the user to rephrase the destination or pick from the search bar."
+            )
+            log.warning("tool_navigate fail: osm miss %s", trunc_preview(msg, 400))
+            return msg
+        if dest_room:
+            log.info(
+                "tool_navigate ignoring dest_room=%r for off-map destination %r",
+                dest_room,
+                feat.name,
+            )
+        end = trip.Endpoint(latlon=(feat.lon, feat.lat), label=feat.name)
 
     if current_lon is not None and current_lat is not None:
         try:
@@ -94,22 +177,34 @@ def navigate(
             label="Your location",
         )
     elif (current_building or "").strip():
-        cur_b = resolve_building_for_agent((current_building or "").strip())
+        raw_cur = (current_building or "").strip()
+        cur_b = resolve_building_for_agent(raw_cur)
         cur_room = normalize_room_code(current_room) or None
-        if cur_room:
-            start_row = find_room(cur_b, cur_room)
-            if start_row is None:
-                log.warning(
-                    "tool_navigate fail: start room miss building=%r room=%r",
-                    cur_b,
-                    cur_room,
-                )
-                return (
-                    f"NAVIGATION_FAILED: Could not find starting room {cur_room!r} in {cur_b!r}."
-                )
-            start = trip.Endpoint(room=start_row, label=f"{start_row.building} {start_row.room}")
+        cur_is_indoor = cur_b.lower() in indoor_buildings
+        if cur_is_indoor:
+            if cur_room:
+                start_row = find_room(cur_b, cur_room)
+                if start_row is None:
+                    log.warning(
+                        "tool_navigate fail: start room miss building=%r room=%r",
+                        cur_b,
+                        cur_room,
+                    )
+                    return (
+                        f"NAVIGATION_FAILED: Could not find starting room {cur_room!r} in {cur_b!r}."
+                    )
+                start = trip.Endpoint(room=start_row, label=f"{start_row.building} {start_row.room}")
+            else:
+                start = trip.Endpoint(building=cur_b, label=cur_b)
         else:
-            start = trip.Endpoint(building=cur_b, label=cur_b)
+            feat = find_osm_destination(raw_cur)
+            if feat is None:
+                log.warning("tool_navigate fail: osm start miss raw=%r", raw_cur)
+                return (
+                    f"NAVIGATION_FAILED: Could not find a place named {raw_cur!r} to start from. "
+                    "Ask the user for a known building or share their map location."
+                )
+            start = trip.Endpoint(latlon=(feat.lon, feat.lat), label=feat.name)
     else:
         log.warning("tool_navigate fail: no start point")
         return (
