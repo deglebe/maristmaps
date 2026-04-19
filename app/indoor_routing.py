@@ -1,3 +1,13 @@
+"""
+Works by using our I* optimized pathing
+        1. compute path using hallways from start to end ignoring floor
+        2. find a stairway/elevator (connector) along route that goes to needed floors
+        3. if there is a connector use it
+        4. if not pick the closest connector to one of the points
+        5. route by connecting points to relevant hallways
+
+"""
+
 from __future__ import annotations
 
 import math
