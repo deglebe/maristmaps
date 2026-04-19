@@ -1,12 +1,30 @@
+# Base compose file.
+#
+# Works for both local dev and production. Dev-only convenience:
+#   * db (5432) and martin (3000) are bound to 127.0.0.1 so host-side
+#     tooling (psql, the flask dev server on :5000) can reach them.
+#     They are NOT reachable from the public internet.
+#   * web (8000) is likewise 127.0.0.1-only — the prod overlay puts
+#     Caddy in front of it.
+#
+# Services are grouped with compose `profiles` so `docker compose up -d`
+# without flags only brings up db + martin (the pieces local dev needs
+# behind a host-run `python run.py`). The full stack comes up via
+# `docker compose --profile app up -d` or `scripts/init.sh --prod`.
+#
+# Production adds Caddy on top via docker-compose.prod.yml; see
+# deploy.md for the full walkthrough.
+
 services:
   db:
     image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: maristmaps
-      POSTGRES_PASSWORD: maristmaps
-      POSTGRES_DB: maristmaps
+      POSTGRES_USER: ${POSTGRES_USER:-maristmaps}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maristmaps}
+      POSTGRES_DB: ${POSTGRES_DB:-maristmaps}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init-postgis.sql:/docker-entrypoint-initdb.d/01-init-postgis.sql
@@ -21,15 +39,77 @@ services:
     image: ghcr.io/maplibre/martin:1.5.0
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      DATABASE_URL: postgres://maristmaps:maristmaps@db:5432/maristmaps
+      DATABASE_URL: postgres://${POSTGRES_USER:-maristmaps}:${POSTGRES_PASSWORD:-maristmaps}@db:5432/${POSTGRES_DB:-maristmaps}
     volumes:
       - ./martin:/config
     depends_on:
       db:
         condition: service_healthy
     command: --config /config/config.yaml
+
+  # One-shot: osm2pgsql import + db/load_data.py. Runs in both the
+  # `init` and `app` profiles so the web service can depend on it via
+  # service_completed_successfully.
+  init:
+    build:
+      context: .
+      dockerfile: docker/init/Dockerfile
+    profiles: ["init", "app"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PBF_FILE: /app/pbf/${PBF_BASENAME:-campus.osm.pbf}
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-maristmaps}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-maristmaps}
+      PGDATABASE: ${POSTGRES_DB:-maristmaps}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-maristmaps}:${POSTGRES_PASSWORD:-maristmaps}@db:5432/${POSTGRES_DB:-maristmaps}
+      OSM2PGSQL_CACHE: ${OSM2PGSQL_CACHE:-512}
+      OSM2PGSQL_EXTRA: ${OSM2PGSQL_EXTRA:-}
+      FORCE_OSM: ${FORCE_OSM:-0}
+      SKIP_OSM: ${SKIP_OSM:-0}
+      SKIP_LOCATIONS: ${SKIP_LOCATIONS:-0}
+    volumes:
+      - ./pbf:/app/pbf:ro
+      - ./db:/app/db:ro
+      - ./data:/app/data:ro
+
+  # Flask app under gunicorn. Only part of the `app` profile so local
+  # dev (which runs `python run.py` on the host) doesn't have to wait
+  # on a container image rebuild each time.
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required — copy .env.example to .env and set it}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required for the agent}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-maristmaps}:${POSTGRES_PASSWORD:-maristmaps}@db:5432/${POSTGRES_DB:-maristmaps}
+      MARTIN_PUBLIC_URL: ${MARTIN_PUBLIC_URL:-http://127.0.0.1:3000}
+      MAP_CENTER_LON: ${MAP_CENTER_LON:--73.93446921913481}
+      MAP_CENTER_LAT: ${MAP_CENTER_LAT:-41.72233476143977}
+      MAP_ZOOM: ${MAP_ZOOM:-16.5}
+      MAP_FEATURE_RADIUS_M: ${MAP_FEATURE_RADIUS_M:-1500}
+      AGENT_BITCH_MODE: ${AGENT_BITCH_MODE:-0}
+      AGENT_LOG_LEVEL: ${AGENT_LOG_LEVEL:-INFO}
+      MARISTMAPS_LOG_LEVEL: ${MARISTMAPS_LOG_LEVEL:-INFO}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+    ports:
+      - "127.0.0.1:8000:8000"
 
 volumes:
   postgres_data:
