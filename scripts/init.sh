@@ -148,6 +148,15 @@ log "bringing up full stack (db, martin, init, web, caddy) ..."
 FORCE_OSM="$FORCE_OSM" SKIP_OSM="$SKIP_OSM" \
     $DC --profile app up -d
 
+# Martin only scans pg_catalog at startup. Compose brings martin and
+# init up in parallel (both depend on db), so martin races init and
+# caches an empty public schema. `up -d` blocks until init completes
+# (web depends on init.service_completed_successfully), so by the time
+# we get here it's safe to kick martin and have it see planet_osm_*.
+log "restarting martin so its catalog picks up the new planet_osm_* tables ..."
+# shellcheck disable=SC2086
+$DC restart martin >/dev/null
+
 # Caddy pulls its cert on first HTTPS request; ping it so the first real
 # user doesn't eat the ACME handshake latency.
 log "waiting 5s for caddy to settle, then poking it ..."
