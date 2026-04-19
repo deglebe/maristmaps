@@ -567,7 +567,8 @@
    * Returns:
    * Nothing.
    */
-  const update3dLayers = () => {
+
+   const update3dLayers = () => {
     const shouldBe3d = map.getPitch() > PITCH_3D_THRESHOLD;
     if (shouldBe3d === in3d) return;
     in3d = shouldBe3d;
@@ -577,7 +578,18 @@
     set("buildings-outline", !in3d);
     set("buildings-3d", in3d);
     if (toggleBtn) toggleBtn.classList.toggle("active", in3d);
+    // Notify the routing layer so it can swap flat MapLibre line for the
+    // Three.js altitude-aware variant. Safe before MaristRoute is ready:
+    // MaristRoute.set3dMode no-ops when state is already in sync, and
+    // routing.js's own mmap.ready handler will pick up the current map
+    // pitch on its first renderMap() call.
+    if (window.MaristRoute && typeof window.MaristRoute.set3dMode === "function") {
+      window.MaristRoute.set3dMode(in3d);
+    }
   };
+
+
+
   map.on("pitch", update3dLayers);
   map.on("load", update3dLayers);
 
