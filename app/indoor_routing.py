@@ -132,7 +132,7 @@ def turn_classify(from_bearing: float, to_bearing: float) -> str:
         return "straight"
     if abs(delta) > BACK_THRESHOLD_DEG:
         return "back"
-    return "left" if delta > 0 else "right" # change this line if you need to change directional directions!
+    return "right" if delta > 0 else "left" # change this line if you need to change directional directions!
 
 
 def project_point_on_segment(
