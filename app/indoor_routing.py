@@ -1,21 +1,3 @@
-"""
-indoor routing over a single building's hallway graph.
-
-companion to app/routing.py (outdoor, osm-based). both routers share a
-coordinate system (lon, lat in epsg:4326) and a walking-speed constant
-so a future trip coordinator can stitch indoor + outdoor + indoor legs.
-
-i*op (indoor * optimized pathing):
-    1. walk it flat.   same-floor hallway route, as if floor didn't matter.
-    2. look along the way.  connector within on_route_threshold_m of that path?
-    3. take it if it's there.  on-path connector wins.
-    4. otherwise, pick closest.  weighted-distance (start 1x, end 1.75x).
-    5. walk each leg on its floor.  dijkstra per floor, edge-projection snap.
-
-no flask / sqlalchemy deps. operates on LocationRow dataclasses — the
-http layer materializes db rows into these before calling in.
-"""
-
 from __future__ import annotations
 
 import math
@@ -140,7 +122,7 @@ def turn_classify(from_bearing: float, to_bearing: float) -> str:
         return "straight"
     if abs(delta) > BACK_THRESHOLD_DEG:
         return "back"
-    return "right" if delta > 0 else "left"
+    return "left" if delta > 0 else "right" # change this line if you need to change directional directions!
 
 
 def project_point_on_segment(
