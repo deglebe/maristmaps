@@ -11,6 +11,7 @@ OSM-known places when the indoor ``locations`` table doesn't have a match.
 
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import threading
@@ -371,44 +372,94 @@ def _norm(s: str) -> str:
     return " ".join((s or "").strip().lower().split())
 
 
+def _strip_filler(q: str) -> str:
+    """Drop leading articles and trailing generics that voice transcripts add.
+
+    Examples:
+      "the home depot"     -> "home depot"
+      "sheahan hall"       -> "sheahan hall"  (kept; 'hall' is part of the name)
+      "the marist college" -> "marist college"
+    """
+    s = q
+    if s.startswith("the "):
+        s = s[4:]
+    return s.strip()
+
+
+# Minimum SequenceMatcher ratio to accept a fuzzy fallback hit. 0.78 catches
+# common voice-transcription typos ("Sheehan" vs "Sheahan", "Donelly" vs
+# "Donnelly") without dragging in unrelated names.
+_FUZZY_MIN_RATIO = 0.78
+
+
+def _fuzzy_best(query: str, names: list[str]) -> tuple[str, float] | None:
+    """Return (best_name, ratio) above ``_FUZZY_MIN_RATIO``, or None."""
+    if not query or not names:
+        return None
+    best_name = None
+    best_ratio = 0.0
+    for n in names:
+        r = difflib.SequenceMatcher(None, query, n).ratio()
+        if r > best_ratio:
+            best_ratio = r
+            best_name = n
+    if best_name is None or best_ratio < _FUZZY_MIN_RATIO:
+        return None
+    return best_name, best_ratio
+
+
 def find_osm_destination(query: str) -> OsmFeature | None:
     """Best-effort fuzzy match against known OSM places.
 
     Order of preference:
-      1. Exact case-insensitive name match.
+      1. Exact case-insensitive name match (with/without leading "the").
       2. Name starts with query, OR query starts with name.
       3. Query is a substring of name (or vice versa).
       4. Every whitespace token of query appears in the name.
+      5. SequenceMatcher similarity above ``_FUZZY_MIN_RATIO`` (catches
+         voice-transcription typos like "Sheehan" → "Sheahan").
 
     On ties we pick the shortest name (most specific).
     """
-    q = _norm(query)
-    if not q:
+    q_raw = _norm(query)
+    if not q_raw:
         return None
+    q = _strip_filler(q_raw)
     candidates = list_osm_destinations()
     if not candidates:
         return None
 
+    by_norm: dict[str, OsmFeature] = {}
     for f in candidates:
-        if _norm(f.name) == q:
-            return f
+        n = _norm(f.name)
+        if n and n not in by_norm:
+            by_norm[n] = f
+
+    if q in by_norm:
+        return by_norm[q]
+    if q_raw in by_norm:
+        return by_norm[q_raw]
 
     def by_len(items: list[OsmFeature]) -> OsmFeature:
         items.sort(key=lambda f: (len(f.name), f.name.lower()))
         return items[0]
 
-    pref = [f for f in candidates if _norm(f.name).startswith(q) or q.startswith(_norm(f.name))]
+    pref = [f for n, f in by_norm.items() if n.startswith(q) or q.startswith(n)]
     if pref:
         return by_len(pref)
 
-    sub = [f for f in candidates if q in _norm(f.name) or _norm(f.name) in q]
+    sub = [f for n, f in by_norm.items() if q in n or n in q]
     if sub:
         return by_len(sub)
 
     tokens = [t for t in q.split() if t]
     if tokens:
-        word_hits = [f for f in candidates if all(t in _norm(f.name) for t in tokens)]
+        word_hits = [f for n, f in by_norm.items() if all(t in n for t in tokens)]
         if word_hits:
             return by_len(word_hits)
+
+    fuzzy = _fuzzy_best(q, list(by_norm.keys()))
+    if fuzzy is not None:
+        return by_norm[fuzzy[0]]
 
     return None
