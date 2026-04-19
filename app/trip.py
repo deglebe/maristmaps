@@ -269,6 +269,105 @@ def _nearest_entrance(
     return min(entrances, key=lambda e: _haversine_m((e.lon, e.lat), target_point))
 
 
+# A bare (lat, lon) that lands within this many meters of a known room or
+# entrance is treated as that anchor for routing purposes. Handles trips
+# where the frontend sent coordinates for e.g. "Hancock 2020" without a
+# room reference — so the same-building fast path below can still see that
+# both endpoints live inside Hancock and skip the outdoor loop.
+_POINT_TO_ANCHOR_THRESHOLD_M = 30.0
+
+
+def _resolve_point_to_anchor(
+    ep: "Endpoint",
+    locations: list[ir.LocationRow],
+) -> ir.LocationRow | None:
+    """Nearest indoor anchor (room preferred over entrance) within
+    ``_POINT_TO_ANCHOR_THRESHOLD_M`` meters of ``ep``, or None.
+
+    Only called for point endpoints; returns None for any other kind.
+    """
+    if ep.kind() != "point":
+        return None
+    target = ep.latlon
+    best: ir.LocationRow | None = None
+    # (tier, distance); lower tier wins. Rooms are tier 0, entrances tier 1.
+    best_score: tuple[int, float] = (2, math.inf)
+    for row in locations:
+        if row.kind == "room":
+            tier = 0
+        elif row.kind == "entrance":
+            tier = 1
+        else:
+            continue
+        d = _haversine_m((row.lon, row.lat), target)
+        if d > _POINT_TO_ANCHOR_THRESHOLD_M:
+            continue
+        score = (tier, d)
+        if score < best_score:
+            best_score = score
+            best = row
+    return best
+
+
+def _promote_point_endpoint(
+    ep: "Endpoint",
+    locations: list[ir.LocationRow],
+) -> "Endpoint":
+    """If ``ep`` is a point landing on a known room/entrance, return an
+    Endpoint of that anchor kind. Otherwise return ``ep`` unchanged.
+
+    Genuinely outdoor points (quads, parking lots, off-campus) don't match
+    any anchor and pass through untouched.
+    """
+    anchor = _resolve_point_to_anchor(ep, locations)
+    if anchor is None:
+        return ep
+    label = ep.label  # preserve whatever the caller set
+    if anchor.kind == "room":
+        return Endpoint(room=anchor, label=label)
+    return Endpoint(entrance=anchor, label=label)
+
+
+def _same_building_indoor_plan(
+    start: "Endpoint",
+    end: "Endpoint",
+    locations: list[ir.LocationRow],
+    *,
+    prefer_elevator: bool,
+) -> dict | None:
+    """Route purely indoors when both endpoints anchor in the same building.
+
+    Covers every room/entrance combination. Invariant: if you're in
+    Hancock going to somewhere else in Hancock, you never step outside.
+    Returns None when no indoor pairing applies (e.g. one side is still a
+    plain 'building' endpoint with no concrete anchor) so the caller can
+    fall back to the general planner.
+    """
+    sk, ek = start.kind(), end.kind()
+    if sk == "room" and ek == "room":
+        p = _indoor_room_to_room(
+            start.room, end.room, locations, prefer_elevator=prefer_elevator,
+        )
+    elif sk == "room" and ek == "entrance":
+        p = _indoor_room_to_entrance(
+            start.room, end.entrance, locations,
+            prefer_elevator=prefer_elevator,
+        )
+    elif sk == "entrance" and ek == "room":
+        p = _indoor_entrance_to_room(
+            start.entrance, end.room, locations,
+            prefer_elevator=prefer_elevator,
+        )
+    elif sk == "entrance" and ek == "entrance":
+        p = _indoor_entrance_to_entrance(
+            start.entrance, end.entrance, locations,
+            prefer_elevator=prefer_elevator,
+        )
+    else:
+        return None
+    return p if _phase_ok(p) else None
+
+
 # --- phase plans, parameterized by "how do we leave / enter each building" ---
 
 
@@ -691,23 +790,31 @@ def _plan_cross_building(
     """Generic plan for trips where the two sides may be indoor or outdoor.
 
     """
+    # First, upgrade bare coordinate endpoints that happen to land on a
+    # known room or entrance. Without this, a destination sent as
+    # (lat, lon) for "Hancock 2020" arrives as a 'point' with no
+    # building association, and the same-building check below can't
+    # fire — we'd end up planning "exit Hancock, walk outside, re-enter
+    # Hancock" for a trip that should stay entirely indoors.
+    start = _promote_point_endpoint(start, locations)
+    end = _promote_point_endpoint(end, locations)
+
     start_bldg = start.indoor_building
     end_bldg = end.indoor_building
 
-    # Same-building fast path (both rooms): route purely indoors.
-    if (
-        start_bldg
-        and start_bldg == end_bldg
-        and start.kind() == "room"
-        and end.kind() == "room"
-    ):
-        p = _indoor_room_to_room(
-            start.room, end.room, locations,
-            prefer_elevator=prefer_elevator,
+    # Same-building invariant: if both endpoints anchor in the same
+    # building, the trip never goes outside. Broader than the old
+    # "both endpoints are rooms" check — covers room/entrance pairings
+    # and the promoted-from-point case above.
+    if start_bldg and start_bldg == end_bldg:
+        p = _same_building_indoor_plan(
+            start, end, locations, prefer_elevator=prefer_elevator,
         )
-        if not _phase_ok(p):
-            raise TripError(p.get("error") or "indoor routing failed")
-        return [p]
+        if p is not None:
+            return [p]
+        # If same-building indoor routing returned None (e.g. one side is
+        # still a 'building' endpoint with no concrete anchor), fall
+        # through to the general planner rather than hard-erroring.
 
     candidates: list[list[dict]] = []
     candidates.extend(_direct_plans(
