@@ -1,0 +1,3 @@
+#,Kind,Subtype,Orientation,Closest entrance,Closest entrance (elevator),Building,Floor,Room,Latitude,Longitude,Notes,Closest stair,Closest elevator,Direction from connector,Connections,Date,Time,Timestamp
+1,entrance,,E,,,Champ Breezeway,1,Main,41.720501,-73.935563,,,,,,19 Apr 2026,16:07:18,2026-04-19T20:07:18.516Z
+2,entrance,,N,,,Champ Breezeway,1,Champ Entrance,41.720419,-73.935639,,,,,,19 Apr 2026,16:07:45,2026-04-19T20:07:45.414Z
