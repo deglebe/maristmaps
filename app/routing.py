@@ -16,7 +16,9 @@ coordinates are (lon, lat) in espg:4326 which matches geojson and maplibre
 from __future__ import annotations
 
 import json
+import logging
 import math
+import os
 import threading
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -28,6 +30,75 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
+
+_log = logging.getLogger(__name__)
+
+
+# -----------------------------------------------------------------------------
+# area filter (shared with osm_features)
+# -----------------------------------------------------------------------------
+#
+# The PBF can legitimately cover far more ground than "campus": our
+# current extract includes the river and most of Poughkeepsie. Routing,
+# search, and graph-build all get painfully slow when they walk every
+# way in that dataset on every startup. We clip everything to a disc
+# around MAP_CENTER_{LON,LAT} with radius MAP_FEATURE_RADIUS_M (env,
+# meters). Set MAP_FEATURE_RADIUS_M=0 to disable the filter.
+
+
+_DEFAULT_CENTER_LON = -73.93446921913481
+_DEFAULT_CENTER_LAT = 41.72233476143977
+_DEFAULT_RADIUS_M = 1500.0
+
+
+def area_params() -> dict:
+    """Read the campus-area filter (center + radius) from env.
+
+    Returns a dict with ``lon``, ``lat``, ``radius_m``. ``radius_m`` may
+    be 0 / negative to disable filtering.
+    """
+    try:
+        lon = float(os.environ.get("MAP_CENTER_LON", _DEFAULT_CENTER_LON))
+    except (TypeError, ValueError):
+        lon = _DEFAULT_CENTER_LON
+    try:
+        lat = float(os.environ.get("MAP_CENTER_LAT", _DEFAULT_CENTER_LAT))
+    except (TypeError, ValueError):
+        lat = _DEFAULT_CENTER_LAT
+    try:
+        radius = float(os.environ.get("MAP_FEATURE_RADIUS_M", _DEFAULT_RADIUS_M))
+    except (TypeError, ValueError):
+        radius = _DEFAULT_RADIUS_M
+    return {"lon": lon, "lat": lat, "radius_m": radius}
+
+
+def area_filter_sql() -> str:
+    """SQL fragment that clips a row's ``way`` column to the configured
+    disc, or an empty string when filtering is disabled.
+
+    Uses geography casts so the radius is in real meters regardless of
+    the planet_osm_* table's projection.
+    """
+    if area_params()["radius_m"] <= 0:
+        return ""
+    return (
+        " AND ST_DWithin("
+        "ST_Transform(way, 4326)::geography, "
+        "ST_SetSRID(ST_MakePoint(:center_lon, :center_lat), 4326)::geography, "
+        ":radius_m)"
+    )
+
+
+def area_filter_params() -> dict:
+    """Bind params for area_filter_sql() — empty when the filter is off."""
+    p = area_params()
+    if p["radius_m"] <= 0:
+        return {}
+    return {
+        "center_lon": p["lon"],
+        "center_lat": p["lat"],
+        "radius_m": p["radius_m"],
+    }
 
 
 # types of osm highways traversable by pedestrians according to osm so we can map cutthroughs too
@@ -141,17 +212,21 @@ _GRAPH_LOCK = threading.Lock()
 _GRAPH: nx.Graph | None = None
 
 
-_WAYS_SQL = text(
-    """
-    SELECT osm_id,
-           highway,
-           name,
-           ST_AsGeoJSON(ST_Transform(way, 4326)) AS geom
-    FROM planet_osm_line
-    WHERE highway = ANY(:kinds)
-      AND ST_GeometryType(way) = 'ST_LineString'
-    """
-)
+def _ways_sql() -> "text":
+    # Built at call time so the area filter picks up the current env
+    # (pytest / reloads can change it between builds).
+    return text(
+        """
+        SELECT osm_id,
+               highway,
+               name,
+               ST_AsGeoJSON(ST_Transform(way, 4326)) AS geom
+        FROM planet_osm_line
+        WHERE highway = ANY(:kinds)
+          AND ST_GeometryType(way) = 'ST_LineString'
+        """
+        + area_filter_sql()
+    )
 
 
 def _iter_segments(coords: Sequence[Sequence[float]]):
@@ -242,10 +317,9 @@ def build_graph() -> nx.Graph:
     nodes are (lon, lat) tuples rounded to COORD_ROUND decimals
     """
     g = nx.Graph()
+    params = {"kinds": list(WALKABLE_HIGHWAYS), **area_filter_params()}
     try:
-        rows = db.session.execute(
-            _WAYS_SQL, {"kinds": list(WALKABLE_HIGHWAYS)}
-        ).mappings().all()
+        rows = db.session.execute(_ways_sql(), params).mappings().all()
     except SQLAlchemyError:
         # table missing or transient db error gives empty graph
         db.session.rollback()
@@ -399,6 +473,28 @@ def reset_graph_cache() -> None:
     global _GRAPH
     with _GRAPH_LOCK:
         _GRAPH = None
+
+
+def warm_cache_async(app) -> None:
+    """Kick off a background thread that builds the route graph.
+
+    The first real /api/route call is cheap because the graph is
+    already in memory. We swallow any exception inside the thread so a
+    DB hiccup at boot doesn't crash the app; the next on-demand
+    get_graph() will try again.
+    """
+    if _GRAPH is not None:
+        return
+
+    def _run():
+        try:
+            with app.app_context():
+                get_graph()
+        except Exception:  # noqa: BLE001
+            _log.exception("routing warm-up failed; will retry on first request")
+
+    t = threading.Thread(target=_run, name="routing-warm", daemon=True)
+    t.start()
 
 
 # -----------------------------------------------------------------------------

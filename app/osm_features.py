@@ -12,6 +12,7 @@ OSM-known places when the indoor ``locations`` table doesn't have a match.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app import routing
 from app.extensions import db
+
+_log = logging.getLogger(__name__)
 
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -39,38 +42,52 @@ class OsmFeature:
 
 # --- SQL ---------------------------------------------------------------------
 
-_BUILDINGS_SQL = text(
-    """
-    SELECT osm_id, name, building, amenity,
-           ST_X(ST_Transform(ST_Centroid(way), 4326)) AS lon,
-           ST_Y(ST_Transform(ST_Centroid(way), 4326)) AS lat
-    FROM planet_osm_polygon
-    WHERE building IS NOT NULL AND name IS NOT NULL AND trim(name) <> ''
-    """
-)
+# All three queries get the shared ST_DWithin clipper from routing so
+# we don't hydrate all of Poughkeepsie on first /api/features call.
 
-_POIS_SQL = text(
-    """
-    SELECT osm_id, name, amenity, shop, tourism, leisure, office,
-           ST_X(ST_Transform(way, 4326)) AS lon,
-           ST_Y(ST_Transform(way, 4326)) AS lat
-    FROM planet_osm_point
-    WHERE name IS NOT NULL AND trim(name) <> ''
-      AND (amenity IS NOT NULL OR shop IS NOT NULL OR tourism IS NOT NULL
-           OR leisure IS NOT NULL OR office IS NOT NULL)
-    """
-)
 
-_PATHS_SQL = text(
-    """
-    SELECT osm_id, name, highway,
-           ST_X(ST_Transform(ST_Centroid(way), 4326)) AS lon,
-           ST_Y(ST_Transform(ST_Centroid(way), 4326)) AS lat
-    FROM planet_osm_line
-    WHERE name IS NOT NULL AND trim(name) <> ''
-      AND highway = ANY(:path_kinds)
-    """
-)
+def _buildings_sql():
+    return text(
+        """
+        SELECT osm_id, name, building, amenity,
+               ST_X(ST_Transform(ST_Centroid(way), 4326)) AS lon,
+               ST_Y(ST_Transform(ST_Centroid(way), 4326)) AS lat
+        FROM planet_osm_polygon
+        WHERE building IS NOT NULL AND name IS NOT NULL AND trim(name) <> ''
+        """
+        + routing.area_filter_sql()
+    )
+
+
+def _pois_sql():
+    return text(
+        """
+        SELECT osm_id, name, amenity, shop, tourism, leisure, office,
+               ST_X(ST_Transform(way, 4326)) AS lon,
+               ST_Y(ST_Transform(way, 4326)) AS lat
+        FROM planet_osm_point
+        WHERE name IS NOT NULL AND trim(name) <> ''
+          AND (amenity IS NOT NULL OR shop IS NOT NULL OR tourism IS NOT NULL
+               OR leisure IS NOT NULL OR office IS NOT NULL)
+        """
+        + routing.area_filter_sql()
+    )
+
+
+def _paths_sql():
+    return text(
+        """
+        SELECT osm_id, name, highway,
+               ST_X(ST_Transform(ST_Centroid(way), 4326)) AS lon,
+               ST_Y(ST_Transform(ST_Centroid(way), 4326)) AS lat
+        FROM planet_osm_line
+        WHERE name IS NOT NULL AND trim(name) <> ''
+          AND highway = ANY(:path_kinds)
+        """
+        + routing.area_filter_sql()
+    )
+
+
 _PATH_KINDS_PARAM = list(routing.PATH_KINDS + routing.STAIR_KINDS)
 
 _BUILDING_POLYGON_BY_OSM_SQL = text(
@@ -205,7 +222,9 @@ def load_osm_buildings() -> list[OsmFeature]:
         return _BUILDINGS
     with _LOCK:
         if _BUILDINGS is None:
-            rows = _apply_overrides_to_building_rows(_safe_rows(_BUILDINGS_SQL))
+            rows = _apply_overrides_to_building_rows(
+                _safe_rows(_buildings_sql(), routing.area_filter_params())
+            )
             out: list[OsmFeature] = []
             for r in rows:
                 lon, lat = r.get("lon"), r.get("lat")
@@ -230,7 +249,7 @@ def load_osm_pois() -> list[OsmFeature]:
     with _LOCK:
         if _POIS is None:
             out: list[OsmFeature] = []
-            for r in _safe_rows(_POIS_SQL):
+            for r in _safe_rows(_pois_sql(), routing.area_filter_params()):
                 lon, lat = r.get("lon"), r.get("lat")
                 if lon is None or lat is None:
                     continue
@@ -255,7 +274,8 @@ def load_osm_paths() -> list[OsmFeature]:
         if _PATHS is None:
             seen: set[str] = set()
             out: list[OsmFeature] = []
-            for r in _safe_rows(_PATHS_SQL, {"path_kinds": _PATH_KINDS_PARAM}):
+            path_params = {"path_kinds": _PATH_KINDS_PARAM, **routing.area_filter_params()}
+            for r in _safe_rows(_paths_sql(), path_params):
                 name = r.get("name")
                 if not name or name in seen:
                     continue
@@ -282,6 +302,26 @@ def reset_osm_cache() -> None:
         _POIS = None
         _PATHS = None
         _OVERRIDES = None
+
+
+def warm_cache_async(app) -> None:
+    """Populate the building / poi / path caches in the background so
+    the first /api/features request returns immediately.
+    """
+    if _BUILDINGS is not None and _POIS is not None and _PATHS is not None:
+        return
+
+    def _run():
+        try:
+            with app.app_context():
+                load_osm_buildings()
+                load_osm_pois()
+                load_osm_paths()
+        except Exception:  # noqa: BLE001
+            _log.exception("osm_features warm-up failed; will retry on first request")
+
+    t = threading.Thread(target=_run, name="osm-features-warm", daemon=True)
+    t.start()
 
 
 # --- search dict (for /api/features) -----------------------------------------

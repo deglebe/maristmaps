@@ -120,50 +120,12 @@ def tools_edit():
 
 @bp.route("/api/features")
 def api_features():
-    features = []
-    for row in _safe_rows(_BUILDINGS_SQL):
-        lon, lat = row["lon"], row["lat"]
-        if lon is None or lat is None:
-            continue
-        features.append({
-            "id": f"way/{row['osm_id']}", "osm_id": row["osm_id"],
-            "kind": "building", "name": row["name"],
-            "subtitle": _building_subtitle(row),
-            "lon": float(lon), "lat": float(lat),
-        })
-    for row in _safe_rows(_POIS_SQL):
-        lon, lat = row["lon"], row["lat"]
-        if lon is None or lat is None:
-            continue
-        features.append({
-            "id": f"node/{row['osm_id']}", "osm_id": row["osm_id"],
-            "kind": "poi", "name": row["name"],
-            "subtitle": _poi_subtitle(row),
-            "lon": float(lon), "lat": float(lat),
-        })
-    seen_path_names = set()
-    for row in _safe_rows(_PATHS_SQL, {"path_kinds": _PATH_KINDS_PARAM}):
-        name = row["name"]
-        if name in seen_path_names:
-            continue
-        lon, lat = row["lon"], row["lat"]
-        if lon is None or lat is None:
-            continue
-        seen_path_names.add(name)
-        features.append(
-            {
-                "id": f"way/{row['osm_id']}",
-                "osm_id": row["osm_id"],
-                "kind": "path",
-                "name": name,
-                "subtitle": _path_subtitle(row),
-                "lon": float(lon),
-                "lat": float(lat),
-            }
-        )
-
-    _apply_building_name_overrides(features)
-
+    # The OSM loaders already apply building-name overrides and dedupe
+    # paths by name; we just flatten them into the search payload.
+    features = [
+        feature_to_search_dict(f)
+        for f in (*load_osm_buildings(), *load_osm_pois(), *load_osm_paths())
+    ]
     features.sort(key=lambda f: (f["kind"], (f["name"] or "").lower()))
     return jsonify({"features": features, "count": len(features)})
 

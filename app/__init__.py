@@ -2,6 +2,7 @@ import os
 
 from flask import Flask, g, session
 
+from app import osm_features, routing
 from app.extensions import db
 from app.models import User
 from app.routes import bp as main_bp
@@ -29,6 +30,13 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+
+    # Build the route graph and OSM feature caches in the background so
+    # the first /api/route and /api/features calls don't pay the cost.
+    # Under werkzeug's reloader this runs once in the parent and again
+    # in the re-exec'd child; the parent's daemon thread dies with it.
+    routing.warm_cache_async(app)
+    osm_features.warm_cache_async(app)
 
     @app.before_request
     def load_logged_in_user():
