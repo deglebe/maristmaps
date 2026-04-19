@@ -8,6 +8,7 @@ networkx==3.3
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
+networkx==3.3
 packaging==26.1
 psycopg2-binary==2.9.11
 SQLAlchemy==2.0.49

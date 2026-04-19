@@ -628,3 +628,386 @@ body.map-view #map {
   background: #f1f3f4;
   outline: none;
 }
+
+/* "prefer elevator" chip in the directions header */
+.directions-pref {
+  margin-right: auto;
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  color: #5f6368;
+}
+.directions-pref input { margin: 0; }
+
+/* Each endpoint = outdoor text field + indoor autocomplete field stacked */
+.directions-endpoint {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* The indoor input lives in a positioned wrapper so its dropdown
+   (the <ul>) can absolutely position below it. */
+.directions-indoor-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.5rem 0.2rem 1.4rem;
+  background: #f8f9fa;
+  border: 1px dashed #dadce0;
+  border-radius: 6px;
+  min-height: 2rem;
+}
+
+.directions-indoor-wrap:focus-within {
+  background: #fff;
+  border-style: solid;
+  border-color: #1a73e8;
+  box-shadow: inset 0 0 0 1px #1a73e8;
+}
+
+.directions-indoor-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: max(15px, 0.875rem);
+  color: #202124;
+  padding: 0.2rem 0;
+}
+
+.directions-indoor-input::placeholder {
+  color: #9aa0a6;
+  font-style: italic;
+}
+
+.directions-indoor-clear {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* The autocomplete dropdown floats below the indoor input. We reuse the
+   generic `.search-results` styles for row layout and just position/scope
+   the container here. */
+.search-results--indoor {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1100;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  box-shadow:
+    0 2px 6px rgba(60, 64, 67, 0.15),
+    0 1px 2px rgba(60, 64, 67, 0.2);
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.indoor-result {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.indoor-result__icon {
+  flex-shrink: 0;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #9aa0a6;
+}
+
+.indoor-result--building .indoor-result__icon { background: #174ea6; border-radius: 2px; }
+.indoor-result--room     .indoor-result__icon { background: #137333; }
+.indoor-result--entrance .indoor-result__icon { background: #8a4a10; border-radius: 0; }
+
+/* Chips on result rows to reinforce the kind (matches the existing
+   building/path/poi chips used by single-search). */
+.search-result__kind--room     { background: #e6f4ea; color: #137333; }
+.search-result__kind--entrance { background: #fdecd4; color: #8a4a10; }
+
+/* ----- Step-by-step turn list ----------------------------------------- */
+
+.directions-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0;
+  border-top: 1px solid #e8eaed;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.step {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: #202124;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.step--phase-header {
+  background: #f8f9fa;
+  color: #5f6368;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  border-top: 1px solid #e8eaed;
+  border-bottom: 1px solid #e8eaed;
+  margin: 0.25rem 0;
+  align-items: center;
+}
+
+.step--phase-header:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+
+.step__chip {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  color: #fff;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+}
+.step__chip--indoor  { background: #137333; }
+.step__chip--outdoor { background: #1a73e8; }
+
+.step__summary, .step__text { flex: 1; min-width: 0; }
+
+.step__turn {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: #9aa0a6;
+}
+.step__turn--left     { background: #1a73e8; }
+.step__turn--right    { background: #e37400; }
+.step__turn--straight { background: #5f6368; }
+.step__turn--back     { background: #c5221f; }
+
+.phase-badge {
+  display: inline-block;
+  margin-left: 0.3rem;
+  font-size: 0.625rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background: #fdecd4;
+  color: #8a4a10;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.step--change_floor    { background: #fff8e1; }
+.step--exit_connector  { background: #fff8e1; }
+.step--arrive          { font-weight: 500; }
+.step--enter_building,
+.step--exit_building   { background: #e8f0fe; }
+
+/* ----- Step icons (inline chip in the turn list) ---------------------
+ *
+ * Rendered inline before the step text. Sized to line up with the
+ * existing step__turn chip so every step row has consistent leading
+ * rhythm regardless of which (icon / turn / neither) is present. */
+.step__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: -0.1rem;
+  border-radius: 4px;
+}
+.step__icon svg { display: block; }
+
+/* ----- On-map markers for connectors/doors --------------------------
+ *
+ * Created as maplibregl.Marker DOM elements in routing.js. Each wraps
+ * a raw SVG from MaristIndoor.icons at 22 px. Add a subtle white halo
+ * so the glyph reads over busy sidewalk / building fills. */
+.mm-route-marker {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 0 2px rgba(255, 255, 255, 0.9);
+  pointer-events: auto;
+  cursor: help;
+}
+
+/* slight tint per kind so they're readable even when zoomed out */
+.mm-route-marker--door     { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 2px #5a9fff; }
+.mm-route-marker--stairs   { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 2px #daa520; }
+.mm-route-marker--elevator { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 2px #e74c3c; }
+
+/* ============================================================
+ * Mobile + small-viewport tweaks
+ * ============================================================
+ *
+ * Two breakpoints:
+ *   - narrow screens (phones, portrait tablets): shrink padding, clamp
+ *     the step list to a fraction of viewport height, bump touch targets
+ *   - short screens (landscape phones): further clamp step list and
+ *     directions summary so the map stays visible
+ *
+ * Uses dvh (dynamic viewport height) with a vh fallback so browser UI
+ * appearing/disappearing on mobile doesn't hide the controls. */
+
+@media (max-width: 640px) {
+  /* Overlay card takes the full width of the usable overlay region. */
+  .search-overlay {
+    max-width: none;
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+  }
+
+  /* Slightly tighter search bar row — a 48px target is still hittable. */
+  .search-bar-row {
+    min-height: 2.75rem;
+    padding: 0 0.5rem;
+  }
+
+  .search-icon-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  /* Directions fields: roomier tap area, tighter gaps between rows. */
+  .directions-fields {
+    gap: 0.3rem 0.3rem;
+    padding: 0.25rem 0.5rem 0.5rem;
+  }
+
+  .directions-field {
+    min-height: 2.6rem;
+    padding: 0.3rem 0.5rem;
+  }
+
+  .directions-field-clear {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .directions-swap-btn {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .directions-indoor-wrap {
+    padding-left: 0.75rem;
+    min-height: 2.3rem;
+  }
+
+  .directions-indoor-input {
+    font-size: max(16px, 0.9rem); /* 16px floor prevents iOS zoom */
+  }
+
+  /* Indoor autocomplete should not cover the whole screen. */
+  .search-results--indoor {
+    max-height: min(14rem, 40vh);
+    max-height: min(14rem, 40dvh);
+  }
+
+  /* Step list: the main culprit on small screens. Clamp hard so the
+     user can still see the map underneath. Scroll if overflow. */
+  .directions-steps {
+    max-height: min(18rem, 38vh);
+    max-height: min(18rem, 38dvh);
+  }
+
+  .step {
+    padding: 0.5rem 0.7rem;
+  }
+
+  /* Action row: stack vertically if very narrow, otherwise wider tap
+     targets. */
+  .directions-actions button {
+    padding: 0.6rem 0.6rem;
+    min-height: 2.5rem;
+  }
+
+  /* Single-search results also clamp on tiny screens. */
+  .search-results {
+    max-height: min(22rem, 55vh);
+    max-height: min(22rem, 55dvh);
+    overflow-y: auto;
+  }
+
+  /* Map connector markers scale down slightly so they don't eat the
+     narrow viewport. */
+  .mm-route-marker {
+    width: 24px;
+    height: 24px;
+  }
+  .mm-route-marker svg { width: 18px; height: 18px; }
+}
+
+/* Very narrow (≤ 380 px): hide the "prefer elevator" label text; keep
+   the checkbox. */
+@media (max-width: 380px) {
+  .directions-pref span {
+    display: none;
+  }
+  .directions-header__title {
+    font-size: 0.875rem;
+  }
+}
+
+/* Landscape phones: viewport is wide but very short. Map visibility
+   matters more here, so cap the step list even lower. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .directions-steps {
+    max-height: min(10rem, 45vh);
+    max-height: min(10rem, 45dvh);
+  }
+  .search-results--indoor {
+    max-height: min(10rem, 50vh);
+    max-height: min(10rem, 50dvh);
+  }
+  /* Stack From/To inputs more compactly. */
+  .directions-field { min-height: 2.1rem; }
+  .directions-indoor-wrap { min-height: 2rem; }
+}
+
+/* Touch-first environments: make the hover-only popup styling not
+   disappear on tap (already works via MapLibre), but also ensure the
+   right-click-style context menu tolerates long-press spacing. */
+@media (pointer: coarse) {
+  .map-context-menu button {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+  }
+  .directions-actions button {
+    min-height: 2.75rem;
+  }
+  .search-result {
+    padding: 0.85rem 1rem;
+  }
+  .indoor-result {
+    padding: 0.7rem 0.8rem;
+  }
+}
+

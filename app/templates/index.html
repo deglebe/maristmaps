@@ -51,6 +51,10 @@
       <div data-mode="directions" hidden>
         <div class="directions-header">
           <span class="directions-header__title">Directions</span>
+          <label class="pref-toggle directions-pref">
+            <input type="checkbox" id="directions-prefer-elevator">
+            <span>prefer elevator</span>
+          </label>
           <button type="button" class="search-icon-btn" id="directions-close-btn" aria-label="Close directions">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M18 6 6 18M6 6l12 12"/>
@@ -58,37 +62,75 @@
           </button>
         </div>
         <div class="directions-fields">
-          <div class="directions-field">
-            <span class="directions-marker directions-marker--from" aria-hidden="true"></span>
-            <input
-              class="directions-input"
-              id="directions-from"
-              type="text"
-              autocomplete="off"
-              aria-label="Starting point"
-              placeholder="Choose starting point…"
-            >
-            <button type="button" class="directions-field-clear" id="directions-clear-from-btn" aria-label="Clear starting point" tabindex="-1">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M18 6 6 18M6 6l12 12"/>
-              </svg>
-            </button>
+          <div class="directions-endpoint">
+            <div class="directions-field">
+              <span class="directions-marker directions-marker--from" aria-hidden="true"></span>
+              <input
+                class="directions-input"
+                id="directions-from"
+                type="text"
+                autocomplete="off"
+                aria-label="Starting point"
+                placeholder="Choose starting point…"
+              >
+              <button type="button" class="directions-field-clear" id="directions-clear-from-btn" aria-label="Clear starting point" tabindex="-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div class="directions-indoor-wrap">
+              <input
+                class="directions-indoor-input"
+                id="directions-from-indoor"
+                type="text"
+                autocomplete="off"
+                aria-label="From room, entrance, or building"
+                aria-controls="directions-from-indoor-results"
+                placeholder="Room, entrance, or building (optional)…"
+              >
+              <button type="button" class="directions-field-clear directions-indoor-clear" id="directions-clear-from-indoor-btn" aria-label="Clear from indoor" tabindex="-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12"/>
+                </svg>
+              </button>
+              <ul class="search-results search-results--indoor" id="directions-from-indoor-results" role="listbox" hidden></ul>
+            </div>
           </div>
-          <div class="directions-field">
-            <span class="directions-marker directions-marker--to" aria-hidden="true"></span>
-            <input
-              class="directions-input"
-              id="directions-to"
-              type="text"
-              autocomplete="off"
-              aria-label="Destination"
-              placeholder="Choose destination…"
-            >
-            <button type="button" class="directions-field-clear" id="directions-clear-to-btn" aria-label="Clear destination" tabindex="-1">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M18 6 6 18M6 6l12 12"/>
-              </svg>
-            </button>
+          <div class="directions-endpoint">
+            <div class="directions-field">
+              <span class="directions-marker directions-marker--to" aria-hidden="true"></span>
+              <input
+                class="directions-input"
+                id="directions-to"
+                type="text"
+                autocomplete="off"
+                aria-label="Destination"
+                placeholder="Choose destination…"
+              >
+              <button type="button" class="directions-field-clear" id="directions-clear-to-btn" aria-label="Clear destination" tabindex="-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div class="directions-indoor-wrap">
+              <input
+                class="directions-indoor-input"
+                id="directions-to-indoor"
+                type="text"
+                autocomplete="off"
+                aria-label="To room, entrance, or building"
+                aria-controls="directions-to-indoor-results"
+                placeholder="Room, entrance, or building (optional)…"
+              >
+              <button type="button" class="directions-field-clear directions-indoor-clear" id="directions-clear-to-indoor-btn" aria-label="Clear to indoor" tabindex="-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12"/>
+                </svg>
+              </button>
+              <ul class="search-results search-results--indoor" id="directions-to-indoor-results" role="listbox" hidden></ul>
+            </div>
           </div>
           <button type="button" class="directions-swap-btn" id="directions-swap-btn" aria-label="Swap start and destination" disabled>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -99,6 +141,7 @@
         </div>
         <ul class="search-results search-results--directions" id="directions-results" role="listbox" hidden></ul>
         <div class="directions-summary" id="directions-summary" hidden></div>
+        <ol class="directions-steps" id="directions-steps" hidden></ol>
         <div class="directions-actions">
           <button type="button" id="directions-clear-btn">Clear</button>
           <button type="button" id="directions-gpx-btn" disabled>Export GPX</button>
@@ -109,6 +152,7 @@
 </div>
 <script type="application/json" id="map-page-config">{{ map_config | tojson }}</script>
 <script src="{{ url_for('static', filename='map.js') }}" defer></script>
+<script src="{{ url_for('static', filename='indoor.js') }}" defer></script>
 <script src="{{ url_for('static', filename='search.js') }}" defer></script>
 <script src="{{ url_for('static', filename='routing.js') }}" defer></script>
 {% endblock %}

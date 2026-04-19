@@ -30,8 +30,6 @@
 
   let _map = null;
 
-  // ---- map layers -------------------------------------------------------
-
   function ensureLayers(map) {
     if (!map.getSource(ROUTE_SOURCE)) {
       map.addSource(ROUTE_SOURCE, {
@@ -47,9 +45,7 @@
     }
     if (!map.getLayer(ROUTE_CASING_LAYER)) {
       map.addLayer({
-        id: ROUTE_CASING_LAYER,
-        type: 'line',
-        source: ROUTE_SOURCE,
+        id: ROUTE_CASING_LAYER, type: 'line', source: ROUTE_SOURCE,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': '#ffffff',
@@ -60,9 +56,7 @@
     }
     if (!map.getLayer(ROUTE_LINE_LAYER)) {
       map.addLayer({
-        id: ROUTE_LINE_LAYER,
-        type: 'line',
-        source: ROUTE_SOURCE,
+        id: ROUTE_LINE_LAYER, type: 'line', source: ROUTE_SOURCE,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': '#1a73e8',
@@ -72,17 +66,13 @@
     }
     if (!map.getLayer(ROUTE_ENDPOINTS_LAYER)) {
       map.addLayer({
-        id: ROUTE_ENDPOINTS_LAYER,
-        type: 'circle',
-        source: ROUTE_ENDPOINTS_SOURCE,
+        id: ROUTE_ENDPOINTS_LAYER, type: 'circle', source: ROUTE_ENDPOINTS_SOURCE,
         paint: {
           'circle-radius': 7,
           'circle-color': [
-            'match',
-            ['get', 'role'],
-            'from', '#34a853',
-            'to',   '#ea4335',
-            /* other */ '#1a73e8',
+            'match', ['get', 'role'],
+            'from', '#34a853', 'to', '#ea4335',
+            '#1a73e8',
           ],
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 2,
@@ -91,23 +81,102 @@
     }
   }
 
+  // Green start / red end dots come from the ROUTE's first/last trackpoint
+  // rather than state.from/state.to, so indoor-only routes get endpoint
+  // dots too. Falls back to the outdoor state points when no route has
+  // been computed yet (e.g. a single endpoint has been set).
   function endpointsFeatureCollection() {
     const features = [];
-    if (state.from) {
+    const pts = state.route && state.route.trackpoints;
+    if (pts && pts.length >= 2) {
       features.push({
         type: 'Feature',
-        geometry: { type: 'Point', coordinates: [state.from.lon, state.from.lat] },
+        geometry: { type: 'Point', coordinates: pts[0] },
         properties: { role: 'from' },
       });
-    }
-    if (state.to) {
       features.push({
         type: 'Feature',
-        geometry: { type: 'Point', coordinates: [state.to.lon, state.to.lat] },
+        geometry: { type: 'Point', coordinates: pts[pts.length - 1] },
         properties: { role: 'to' },
       });
+    } else {
+      if (state.from) {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [state.from.lon, state.from.lat] },
+          properties: { role: 'from' },
+        });
+      }
+      if (state.to) {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [state.to.lon, state.to.lat] },
+          properties: { role: 'to' },
+        });
+      }
     }
     return { type: 'FeatureCollection', features };
+  }
+
+  // ---- connector / door markers ---------------------------------------
+
+
+  const connectorMarkers = [];
+
+  function clearConnectorMarkers() {
+    while (connectorMarkers.length) {
+      const m = connectorMarkers.pop();
+      m.remove();
+    }
+  }
+
+  function stepWarrantsMapMarker(step, isFirstStep, isLastStep) {
+    if (isFirstStep) return false;         // overlaps start dot
+    if (isLastStep) return false;          // overlaps end dot
+    if (step.kind === 'exit_connector') return false; // shares pt w/ change_floor
+    if (step.kind === 'exit_room') return false;      // shares room point; rare
+    switch (step.kind) {
+      case 'change_floor':
+      case 'enter_building':
+      case 'exit_building':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  function addConnectorMarkers() {
+    clearConnectorMarkers();
+    if (!_map) return;
+    const route = state.route;
+    if (!route || !Array.isArray(route.phases)) return;
+    const indoor = window.MaristIndoor;
+    if (!indoor || !indoor.icons) return;
+
+    // Flatten steps with a running first/last marker so the renderer
+    const allSteps = [];
+    for (const phase of route.phases) {
+      for (const step of (phase.steps || [])) allSteps.push(step);
+    }
+    allSteps.forEach((step, i) => {
+      const isFirst = i === 0;
+      const isLast = i === allSteps.length - 1;
+      if (!stepWarrantsMapMarker(step, isFirst, isLast)) return;
+      const pt = (step.polyline && step.polyline[0]) || null;
+      if (!pt || !Array.isArray(pt) || pt.length < 2) return;
+      const iconName = indoor.iconNameForStep(step);
+      if (!iconName) return;
+
+      const el = document.createElement('div');
+      el.className = `mm-route-marker mm-route-marker--${iconName}`;
+      el.innerHTML = indoor.icons[iconName](22);
+      el.title = step.text || iconName;
+
+      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat(pt)
+        .addTo(_map);
+      connectorMarkers.push(marker);
+    });
   }
 
   function renderMap() {
@@ -115,17 +184,18 @@
     ensureLayers(_map);
     const endpoints = _map.getSource(ROUTE_ENDPOINTS_SOURCE);
     if (endpoints) endpoints.setData(endpointsFeatureCollection());
-
     const routeSrc = _map.getSource(ROUTE_SOURCE);
-    if (!routeSrc) return;
-    if (state.route && state.route.feature) {
-      routeSrc.setData({
-        type: 'FeatureCollection',
-        features: [state.route.feature],
-      });
-    } else {
-      routeSrc.setData({ type: 'FeatureCollection', features: [] });
+    if (routeSrc) {
+      if (state.route && state.route.feature) {
+        routeSrc.setData({
+          type: 'FeatureCollection',
+          features: [state.route.feature],
+        });
+      } else {
+        routeSrc.setData({ type: 'FeatureCollection', features: [] });
+      }
     }
+    addConnectorMarkers();
   }
 
   function fitRoute() {
@@ -141,13 +211,9 @@
       if (lat > maxLat) maxLat = lat;
     }
     _map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
-      padding: 80,
-      maxZoom: 19,
-      duration: 600,
+      padding: 80, maxZoom: 19, duration: 600,
     });
   }
-
-  // ---- state sync + routing call ---------------------------------------
 
   function emitChange(extra) {
     document.dispatchEvent(new CustomEvent('mmap:route-changed', {
@@ -158,10 +224,62 @@
         ...(extra || {}),
       },
     }));
+    if (window.MaristIndoor && typeof window.MaristIndoor.renderSteps === 'function') {
+      window.MaristIndoor.renderSteps(state.route);
+    }
+  }
+
+  function indoorSnapshot() {
+    if (window.MaristIndoor && typeof window.MaristIndoor.snapshot === 'function') {
+      return window.MaristIndoor.snapshot();
+    }
+    return { from: null, to: null, preferElevator: false };
+  }
+
+  function haveEnoughEndpoints() {
+    const indoor = indoorSnapshot();
+    return !!(state.from || indoor.from) && !!(state.to || indoor.to);
+  }
+
+  // Turn an indoor endpoint payload into query params. The server's
+  // `_resolve_endpoint` knows these kinds; adding a new kind means adding
+  // one case both here and there.
+  function appendIndoorParams(params, prefix, endpoint, label) {
+    if (!endpoint) return;
+    const ep = endpoint.endpoint || endpoint; // accept either shape
+    params.set(`${prefix}_kind`, ep.kind);
+    if (ep.building) params.set(`${prefix}_building`, ep.building);
+    if (ep.room) params.set(`${prefix}_room`, ep.room);
+    if (ep.name) params.set(`${prefix}_name`, ep.name);
+    if (label) params.set(`${prefix}_label`, label);
+  }
+
+  function buildRouteParams() {
+    const indoor = indoorSnapshot();
+    const params = new URLSearchParams();
+
+    if (indoor.from) {
+      appendIndoorParams(params, 'from', indoor.from.endpoint, indoor.from.label);
+    } else if (state.from) {
+      params.set('from_lon', state.from.lon);
+      params.set('from_lat', state.from.lat);
+      if (state.from.label) params.set('from_label', state.from.label);
+    }
+
+    if (indoor.to) {
+      appendIndoorParams(params, 'to', indoor.to.endpoint, indoor.to.label);
+    } else if (state.to) {
+      params.set('to_lon', state.to.lon);
+      params.set('to_lat', state.to.lat);
+      if (state.to.label) params.set('to_label', state.to.label);
+    }
+
+    if (indoor.preferElevator) params.set('prefer_elevator', '1');
+    return params;
   }
 
   async function recomputeRoute() {
-    if (!state.from || !state.to) {
+    if (!haveEnoughEndpoints()) {
       state.route = null;
       renderMap();
       emitChange({ status: 'idle' });
@@ -172,14 +290,7 @@
     state.inflight = ctrl;
     emitChange({ status: 'loading' });
     try {
-      const params = new URLSearchParams({
-        from_lon: state.from.lon,
-        from_lat: state.from.lat,
-        to_lon: state.to.lon,
-        to_lat: state.to.lat,
-      });
-      if (state.from.label) params.set('from_label', state.from.label);
-      if (state.to.label) params.set('to_label', state.to.label);
+      const params = buildRouteParams();
       const res = await fetch(`/api/route?${params.toString()}`, {
         headers: { Accept: 'application/json' },
         signal: ctrl.signal,
@@ -189,7 +300,7 @@
         try {
           const body = await res.json();
           if (body && body.description) msg = body.description;
-        } catch (_ignored) { /* body not json */ }
+        } catch (_ignored) { /* not json */ }
         throw new Error(msg);
       }
       state.route = await res.json();
@@ -209,8 +320,7 @@
 
   function normalizePoint(pt) {
     if (!pt) return null;
-    const lon = Number(pt.lon);
-    const lat = Number(pt.lat);
+    const lon = Number(pt.lon), lat = Number(pt.lat);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
     return { lon, lat, label: pt.label || null };
   }
@@ -227,31 +337,31 @@
       recomputeRoute();
     },
     swap() {
-      if (!(state.from && state.to)) return;
+      const indoor = indoorSnapshot();
+      if (!state.from && !state.to && !indoor.from && !indoor.to) return;
       [state.from, state.to] = [state.to, state.from];
+      if (window.MaristIndoor && typeof window.MaristIndoor.swap === 'function') {
+        window.MaristIndoor.swap();
+      } else {
+        recomputeRoute();
+      }
       renderMap();
-      recomputeRoute();
     },
     clear() {
       state.from = null;
       state.to = null;
       state.route = null;
       if (state.inflight) state.inflight.abort();
+      if (window.MaristIndoor) {
+        window.MaristIndoor.setSide('from', null);
+        window.MaristIndoor.setSide('to', null);
+      }
       renderMap();
       emitChange({ status: 'idle' });
     },
     exportGpx() {
-      if (!(state.from && state.to)) return;
-      const params = new URLSearchParams({
-        from_lon: state.from.lon,
-        from_lat: state.from.lat,
-        to_lon: state.to.lon,
-        to_lat: state.to.lat,
-      });
-      if (state.from.label) params.set('from_label', state.from.label);
-      if (state.to.label) params.set('to_label', state.to.label);
-      // Let the browser handle the download via the server's
-      // Content-Disposition header.
+      if (!haveEnoughEndpoints()) return;
+      const params = buildRouteParams();
       window.location.href = `/api/route.gpx?${params.toString()}`;
     },
     get snapshot() {
@@ -265,25 +375,9 @@
 
   window.MaristRoute = api;
 
-  // ---- right-click context menu ----------------------------------------
-  //
-  // A secondary way to set endpoints. Primary UX lives in the sidebar
-  // (search.js), but right-click-on-map-to-set-waypoint is a natural
-  // affordance borrowed from Google Maps. Picking an item here calls the
-  // same MaristRoute API, and search.js listens to `mmap:route-changed`
-  // to flip the sidebar into directions mode so the user sees the
-  // synchronized state immediately.
-  //
-  // Closing rules:
-  //  - any click outside the menu,
-  //  - Escape,
-  //  - map interaction (pan / zoom / left-click),
-  //  - window resize.
-  //
-  // The element uses `hidden` for visibility; style.css has a matching
-  // `.map-context-menu[hidden] { display: none }` that beats the
-  // `display: flex` default — see note in style.css.
+  document.addEventListener('mmap:indoor-changed', () => recomputeRoute());
 
+  // ---- right-click context menu ---------------------------------------
   const menu = document.createElement('div');
   menu.className = 'map-context-menu';
   menu.hidden = true;
@@ -294,7 +388,6 @@
   `;
   document.body.appendChild(menu);
 
-  /** Current click location + any building detected under it. */
   let menuAt = null;
 
   function hideMenu() {
@@ -304,19 +397,12 @@
   }
 
   function showMenu(clientX, clientY, lngLat, buildingName) {
-    menuAt = {
-      lon: lngLat.lng,
-      lat: lngLat.lat,
-      label: buildingName || null,
-    };
+    menuAt = { lon: lngLat.lng, lat: lngLat.lat, label: buildingName || null };
     menu.hidden = false;
-    // Position with a nudge so the cursor is inside the menu, and flip
-    // sides when we'd otherwise overflow the viewport.
     const margin = 4;
     const { innerWidth, innerHeight } = window;
     const rect = menu.getBoundingClientRect();
-    let x = clientX + margin;
-    let y = clientY + margin;
+    let x = clientX + margin, y = clientY + margin;
     if (x + rect.width > innerWidth) x = clientX - rect.width - margin;
     if (y + rect.height > innerHeight) y = clientY - rect.height - margin;
     menu.style.left = `${Math.max(4, x)}px`;
@@ -341,8 +427,6 @@
   window.addEventListener('resize', hideMenu);
   window.addEventListener('scroll', hideMenu, true);
 
-  // ---- map wiring -------------------------------------------------------
-
   const mmap = window.MaristMap;
   if (!mmap || !mmap.ready) {
     console.warn('[routing] MaristMap not found; routing disabled');
@@ -356,9 +440,6 @@
 
     map.on('contextmenu', (e) => {
       e.preventDefault();
-      // If the right-click landed on a building polygon, pick up its
-      // name (or a sensible fallback) so the directions label is
-      // useful rather than a bare lat/lon.
       let label = null;
       try {
         const hits = map.queryRenderedFeatures(e.point, { layers: ['buildings'] });
