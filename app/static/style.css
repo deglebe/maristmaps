@@ -1,3 +1,181 @@
+/* ============================================================
+ * Theme tokens (Everforest medium — dark + light)
+ *
+ * Every surface color comes from these variables so toggling
+ * `data-theme` on <html> flips the whole UI without touching a
+ * single rule. The map basemap lives in JS; see `map.js` for its
+ * parallel palette keyed off the same theme attribute.
+ * ============================================================ */
+
+:root,
+[data-theme="dark"] {
+  /* Everforest – dark, medium (canonical values from sainnhe/everforest) */
+  --ef-bg-dim:    #232a2e;
+  --ef-bg0:       #2d353b;
+  --ef-bg1:       #343f44;
+  --ef-bg2:       #3d484d;
+  --ef-bg3:       #475258;
+  --ef-bg4:       #4f585e;
+  --ef-bg5:       #56635f;
+  --ef-bg-visual: #543a48;
+  --ef-bg-red:    #514045;
+  --ef-bg-green:  #425047;
+  --ef-bg-yellow: #4d4c43;
+  --ef-bg-blue:   #3a515d;
+
+  --ef-fg:     #d3c6aa;
+  --ef-grey0:  #7a8478;
+  --ef-grey1:  #859289;
+  --ef-grey2:  #9da9a0;
+
+  --ef-red:    #e67e80;
+  --ef-orange: #e69875;
+  --ef-yellow: #dbbc7f;
+  --ef-green:  #a7c080;
+  --ef-aqua:   #83c092;
+  --ef-blue:   #7fbbb3;
+  --ef-purple: #d699b6;
+
+  /* Semantic slots */
+  --color-bg:            var(--ef-bg0);
+  --color-surface:       var(--ef-bg1);
+  --color-surface-alt:   var(--ef-bg2);
+  --color-surface-sunken:var(--ef-bg2);
+  --color-surface-hover: var(--ef-bg3);
+  --color-border:        var(--ef-bg3);
+  --color-border-strong: var(--ef-bg4);
+  --color-divider:       var(--ef-bg2);
+
+  --color-text:          var(--ef-fg);
+  --color-text-strong:   #e8dcc0;
+  --color-text-muted:    var(--ef-grey2);
+  --color-text-dim:      var(--ef-grey1);
+
+  --color-accent:        var(--ef-blue);
+  --color-accent-strong: #a8d3ce;
+  --color-accent-bg:     var(--ef-bg-blue);
+  --color-accent-contrast: #1e2529;
+
+  --color-success:       var(--ef-green);
+  --color-success-bg:    var(--ef-bg-green);
+  --color-warning:       var(--ef-orange);
+  --color-warning-bg:    #4a3e36;
+  --color-danger:        var(--ef-red);
+  --color-danger-bg:     var(--ef-bg-red);
+
+  --color-chip-building-fg: #a8c7f0;
+  --color-chip-building-bg: var(--ef-bg-blue);
+  --color-chip-path-fg:     var(--ef-orange);
+  --color-chip-path-bg:     var(--ef-bg-yellow);
+  --color-chip-poi-fg:      var(--ef-green);
+  --color-chip-poi-bg:      var(--ef-bg-green);
+  --color-chip-room-fg:     var(--ef-aqua);
+  --color-chip-room-bg:     var(--ef-bg-green);
+  --color-chip-entrance-fg: var(--ef-yellow);
+  --color-chip-entrance-bg: var(--ef-bg-yellow);
+
+  --color-marker-building: #5a90e0;
+  --color-marker-room:     var(--ef-green);
+  --color-marker-entrance: var(--ef-orange);
+  --color-marker-path:     var(--ef-orange);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.55), 0 4px 10px rgba(0, 0, 0, 0.35);
+
+  --marker-halo: rgba(30, 36, 42, 0.9);
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  /* Everforest – light, medium (canonical values from sainnhe/everforest) */
+  --ef-bg-dim:    #efebd4;
+  --ef-bg0:       #fdf6e3;
+  --ef-bg1:       #f4f0d9;
+  --ef-bg2:       #efebd4;
+  --ef-bg3:       #e6e2cc;
+  --ef-bg4:       #e0dcc7;
+  --ef-bg5:       #bdc3af;
+  --ef-bg-visual: #eaedc8;
+  --ef-bg-red:    #fbe3da;
+  --ef-bg-green:  #f0f1d2;
+  --ef-bg-yellow: #faedcd;
+  --ef-bg-blue:   #e9f0e9;
+
+  --ef-fg:     #5c6a72;
+  --ef-grey0:  #a6b0a0;
+  --ef-grey1:  #939f91;
+  --ef-grey2:  #829181;
+
+  --ef-red:    #f85552;
+  --ef-orange: #f57d26;
+  --ef-yellow: #dfa000;
+  --ef-green:  #8da101;
+  --ef-aqua:   #35a77c;
+  --ef-blue:   #3a94c5;
+  --ef-purple: #df69ba;
+
+  --color-bg:            var(--ef-bg0);
+  --color-surface:       #ffffff;
+  --color-surface-alt:   var(--ef-bg1);
+  --color-surface-sunken:var(--ef-bg2);
+  --color-surface-hover: var(--ef-bg3);
+  --color-border:        var(--ef-bg4);
+  --color-border-strong: var(--ef-bg5);
+  --color-divider:       var(--ef-bg3);
+
+  --color-text:          var(--ef-fg);
+  --color-text-strong:   #384045;
+  --color-text-muted:    var(--ef-grey2);
+  --color-text-dim:      var(--ef-grey1);
+
+  --color-accent:        var(--ef-blue);
+  --color-accent-strong: #1f7aa8;
+  --color-accent-bg:     var(--ef-bg-blue);
+  --color-accent-contrast: #ffffff;
+
+  --color-success:       var(--ef-green);
+  --color-success-bg:    var(--ef-bg-green);
+  --color-warning:       var(--ef-orange);
+  --color-warning-bg:    var(--ef-bg-yellow);
+  --color-danger:        var(--ef-red);
+  --color-danger-bg:     var(--ef-bg-red);
+
+  --color-chip-building-fg: #1f4d8a;
+  --color-chip-building-bg: var(--ef-bg-blue);
+  --color-chip-path-fg:     #8a4a10;
+  --color-chip-path-bg:     var(--ef-bg-yellow);
+  --color-chip-poi-fg:      #4f6a02;
+  --color-chip-poi-bg:      var(--ef-bg-green);
+  --color-chip-room-fg:     #256f56;
+  --color-chip-room-bg:     var(--ef-bg-green);
+  --color-chip-entrance-fg: #8a4a10;
+  --color-chip-entrance-bg: var(--ef-bg-yellow);
+
+  --color-marker-building: #174ea6;
+  --color-marker-room:     #137333;
+  --color-marker-entrance: #8a4a10;
+  --color-marker-path:     #8a4a10;
+
+  --shadow-1: 0 1px 2px rgba(60, 64, 67, 0.18);
+  --shadow-2: 0 2px 6px rgba(60, 64, 67, 0.18), 0 1px 2px rgba(60, 64, 67, 0.20);
+  --shadow-card: 0 1px 2px rgba(60, 64, 67, 0.28), 0 2px 6px rgba(60, 64, 67, 0.14);
+
+  --marker-halo: rgba(255, 255, 255, 0.95);
+
+  color-scheme: light;
+}
+
+/* ============================================================
+ * Base
+ * ============================================================ */
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   margin: 1rem;
@@ -12,6 +190,7 @@ header a,
 header span,
 header form {
   margin-right: 0.75rem;
+  color: var(--color-text);
 }
 
 header .inline-form {
@@ -36,13 +215,8 @@ ul.flash {
   padding-left: 1.25rem;
 }
 
-.flash .error {
-  color: #b00;
-}
-
-.flash .ok {
-  color: #060;
-}
+.flash .error { color: var(--color-danger); }
+.flash .ok    { color: var(--color-success); }
 
 /* App shell: full-viewport maps-style layout */
 body.app-shell {
@@ -65,9 +239,9 @@ body.app-shell header.app-topbar {
   padding-top: max(0.625rem, env(safe-area-inset-top));
   display: flex;
   align-items: center;
-  background: #fff;
-  border-bottom: 1px solid #dadce0;
-  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-1);
 }
 
 body.app-shell main {
@@ -81,7 +255,6 @@ body.app-shell main {
   flex-direction: column;
 }
 
-/* Map fills screen */
 body.app-shell--map header.app-topbar {
   display: none;
 }
@@ -105,13 +278,17 @@ body.app-shell--map .flash {
 .map-viewport {
   position: absolute;
   inset: 0;
-  background: #e8eaed;
+  background: var(--color-bg);
 }
 
 .map-viewport #map {
   position: absolute;
   inset: 0;
 }
+
+/* ============================================================
+ * Search card
+ * ============================================================ */
 
 .search-overlay {
   position: absolute;
@@ -125,11 +302,10 @@ body.app-shell--map .flash {
 
 .search-card {
   pointer-events: auto;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
   border-radius: 8px;
-  box-shadow:
-    0 1px 2px rgba(60, 64, 67, 0.3),
-    0 2px 6px rgba(60, 64, 67, 0.15);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -165,7 +341,7 @@ body.app-shell--map .flash {
   outline: none;
   background: transparent;
   box-shadow: none;
-  color: #202124;
+  color: var(--color-text-strong);
 }
 
 .search-input-wrap--faux-empty .search-input {
@@ -176,8 +352,8 @@ body.app-shell--map .flash {
 
 .search-input-wrap .search-input:focus {
   box-shadow: none;
-  color: #202124;
-  -webkit-text-fill-color: #202124;
+  color: var(--color-text-strong);
+  -webkit-text-fill-color: var(--color-text-strong);
   caret-color: auto;
 }
 
@@ -189,7 +365,7 @@ body.app-shell--map .flash {
   transform: translateY(-50%);
   z-index: 2;
   pointer-events: none;
-  color: #70757a;
+  color: var(--color-text-muted);
   font-size: max(16px, 1rem);
   line-height: 1.3;
   transition: opacity 0.45s ease;
@@ -198,14 +374,8 @@ body.app-shell--map .flash {
   text-overflow: ellipsis;
 }
 
-.search-placeholder-cycle--exit {
-  opacity: 0;
-}
-
-.search-placeholder-cycle--off {
-  opacity: 0;
-  visibility: hidden;
-}
+.search-placeholder-cycle--exit { opacity: 0; }
+.search-placeholder-cycle--off { opacity: 0; visibility: hidden; }
 
 .search-icon-btn {
   flex-shrink: 0;
@@ -217,53 +387,47 @@ body.app-shell--map .flash {
   padding: 0;
   border: none;
   background: transparent;
-  color: #5f6368;
+  color: var(--color-text-muted);
   cursor: default;
   border-radius: 50%;
 }
 
 .search-icon-btn:hover {
-  background: #f1f3f4;
-  color: #202124;
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
 }
 
 .search-icon-btn.search-voice-btn--recording {
-  color: #c5221f;
-  background: #fce8e6;
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
   cursor: pointer;
 }
 
 .search-icon-btn.search-voice-btn--recording:hover {
-  background: #fad2cf;
+  background: var(--color-danger-bg);
+  filter: brightness(1.1);
 }
 
-#search-voice-btn {
-  position: relative;
-}
+#search-voice-btn { position: relative; }
 
 .search-voice-btn__spinner {
   display: none;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(95, 99, 104, 0.25);
-  border-top-color: #1a73e8;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: search-voice-spin 0.8s linear infinite;
 }
 
 #search-voice-btn.search-voice-btn--processing {
   cursor: progress;
-  background: #f1f3f4;
-  color: #1a73e8;
+  background: var(--color-surface-hover);
+  color: var(--color-accent);
 }
 
-#search-voice-btn.search-voice-btn--processing .search-voice-btn__icon {
-  display: none;
-}
-
-#search-voice-btn.search-voice-btn--processing .search-voice-btn__spinner {
-  display: inline-block;
-}
+#search-voice-btn.search-voice-btn--processing .search-voice-btn__icon { display: none; }
+#search-voice-btn.search-voice-btn--processing .search-voice-btn__spinner { display: inline-block; }
 
 @keyframes search-voice-spin {
   to { transform: rotate(360deg); }
@@ -273,9 +437,10 @@ body.app-shell--map .flash {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid #e8eaed;
+  border-top: 1px solid var(--color-divider);
   overflow-x: hidden;
   overflow-y: visible;
+  background: var(--color-surface);
 }
 
 .search-result {
@@ -285,7 +450,8 @@ body.app-shell--map .flash {
   padding: 0.75rem 1rem;
   cursor: pointer;
   border: none;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -295,12 +461,12 @@ body.app-shell--map .flash {
 
 .search-result:hover,
 .search-result:focus {
-  background: #f8f9fa;
+  background: var(--color-surface-hover);
 }
 
 .search-result--empty {
   cursor: default;
-  color: #5f6368;
+  color: var(--color-text-muted);
   font-size: 0.875rem;
 }
 
@@ -310,8 +476,8 @@ body.app-shell--map .flash {
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 50%;
-  background: #9aa0a6;
-  color: #5f6368;
+  background: var(--color-text-muted);
+  color: var(--color-text-muted);
 }
 
 .search-result__text {
@@ -323,27 +489,23 @@ body.app-shell--map .flash {
 
 .search-result__title {
   font-size: 0.9375rem;
-  color: #202124;
+  color: var(--color-text-strong);
   line-height: 1.3;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.search-result__title strong {
-  font-weight: 600;
-}
+.search-result__title strong { font-weight: 600; }
 
 .search-result__sub {
   font-size: 0.8125rem;
-  color: #70757a;
+  color: var(--color-text-muted);
   line-height: 1.3;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-/* A small chip that labels result rows as building / path / POI so users
-   can tell a named pedestrian walk apart from a building with the same
-   street name. */
+/* Kind chips on result rows. */
 .search-result__kind {
   align-self: flex-start;
   margin-top: 0.125rem;
@@ -352,50 +514,45 @@ body.app-shell--map .flash {
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #5f6368;
-  background: #f1f3f4;
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
   border-radius: 999px;
   padding: 0.125rem 0.5rem;
 }
 
-.search-result__kind--building { background: #e6efff; color: #174ea6; }
-.search-result__kind--path     { background: #fdecd4; color: #8a4a10; }
-.search-result__kind--poi      { background: #e6f4ea; color: #137333; }
+.search-result__kind--building { background: var(--color-chip-building-bg); color: var(--color-chip-building-fg); }
+.search-result__kind--path     { background: var(--color-chip-path-bg);     color: var(--color-chip-path-fg); }
+.search-result__kind--poi      { background: var(--color-chip-poi-bg);      color: var(--color-chip-poi-fg); }
+.search-result__kind--room     { background: var(--color-chip-room-bg);     color: var(--color-chip-room-fg); }
+.search-result__kind--entrance { background: var(--color-chip-entrance-bg); color: var(--color-chip-entrance-fg); }
 
-/* Small colored dot markers for single-search result rows, echoing the
-   palette used by .indoor-result--kind so the two surfaces feel like
-   one system. */
-.search-result__icon--building { background: #174ea6; border-radius: 2px; }
-.search-result__icon--room     { background: #137333; }
-.search-result__icon--entrance { background: #8a4a10; border-radius: 0; }
-.search-result__icon--poi      { background: #137333; }
-.search-result__icon--path     { background: #8a4a10; border-radius: 1px; }
+/* Small colored dot markers for result rows. */
+.search-result__icon--building { background: var(--color-marker-building); border-radius: 2px; }
+.search-result__icon--room     { background: var(--color-marker-room); }
+.search-result__icon--entrance { background: var(--color-marker-entrance); border-radius: 0; }
+.search-result__icon--poi      { background: var(--color-marker-room); }
+.search-result__icon--path     { background: var(--color-marker-path); border-radius: 1px; }
 
-/* Rooms nested under a matched building render one level indented so
-   the grouping reads at a glance. */
+/* Rooms nested under a matched building render one level indented. */
 .search-result--child {
   padding-left: 2rem;
-  background: #fafbfc;
+  background: var(--color-surface-alt);
 }
 .search-result--child:hover,
 .search-result--child:focus {
-  background: #f1f3f4;
+  background: var(--color-surface-hover);
 }
-.search-result--child .search-result__icon {
-  opacity: 0.85;
-}
+.search-result--child .search-result__icon { opacity: 0.85; }
 
-/* Non-interactive footer row telling the user there are more matches
-   than we're showing so they refine their search. */
 .search-result--more {
   cursor: default;
   padding: 0.4rem 1rem 0.6rem 2rem;
   font-size: 0.75rem;
-  color: #70757a;
-  background: #fafbfc;
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
 }
 
-/* Bare standalone map page (no app-shell / search overlay). */
+/* Bare standalone map page. */
 body.map-view {
   margin: 0;
   height: 100vh;
@@ -403,9 +560,7 @@ body.map-view {
   overflow: hidden;
 }
 
-body.map-view header.app-topbar {
-  display: none;
-}
+body.map-view header.app-topbar { display: none; }
 
 body.map-view main {
   max-width: none;
@@ -419,24 +574,70 @@ body.map-view #map {
   inset: 0;
 }
 
-/* Popup styling shared across every page that embeds the map. */
-.maplibregl-popup-content {
+/* ============================================================
+ * MapLibre popup + controls
+ *
+ * `maplibre-gl.css` is loaded from the child template's `{% block head %}`
+ * block and therefore lands in the cascade AFTER our style.css, so we
+ * pin every override to the `[data-theme]` attribute on <html>. That
+ * gives us specificity `0,2,0` (attr + class) vs their `0,1,0`, beating
+ * them cleanly without having to sprinkle `!important`.
+ * ============================================================ */
+
+[data-theme] .maplibregl-popup-content {
   font: 13px/1.35 system-ui, sans-serif;
   padding: 0.5rem 0.7rem;
   max-width: 22rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-2);
+  border-radius: 6px;
 }
 
-.maplibregl-popup-content strong {
+[data-theme] .maplibregl-popup-close-button {
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+[data-theme] .maplibregl-popup-close-button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+
+/* The popup tip is a CSS-triangle built from borders; the side pointing
+   at the anchor inherits the content background and must be kept in sync. */
+[data-theme] .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+[data-theme] .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+[data-theme] .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--color-surface);
+}
+[data-theme] .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+[data-theme] .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+[data-theme] .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--color-surface);
+}
+[data-theme] .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--color-surface);
+}
+[data-theme] .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--color-surface);
+}
+
+[data-theme] .maplibregl-popup-content strong {
   display: block;
   margin-bottom: 0.35rem;
   font-size: 14px;
+  color: var(--color-text-strong);
 }
 
-.maplibregl-popup-content .tag {
-  color: #666;
+[data-theme] .maplibregl-popup-content .tag {
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
+[data-theme] .maplibregl-popup-content table.attrs {
 .maplibregl-popup-content .popup-actions {
   display: flex;
   gap: 0.4rem;
@@ -481,28 +682,54 @@ body.map-view #map {
   font-size: 12px;
 }
 
-.maplibregl-popup-content table.attrs th,
-.maplibregl-popup-content table.attrs td {
+[data-theme] .maplibregl-popup-content table.attrs th,
+[data-theme] .maplibregl-popup-content table.attrs td {
   text-align: left;
   vertical-align: top;
   padding: 2px 6px 2px 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-divider);
 }
 
-.maplibregl-popup-content table.attrs th {
+[data-theme] .maplibregl-popup-content table.attrs th {
   font-weight: 500;
-  color: #555;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
-.maplibregl-popup-content table.attrs td {
-  color: #222;
+[data-theme] .maplibregl-popup-content table.attrs td {
+  color: var(--color-text);
   word-break: break-word;
 }
 
-.maplibregl-popup-content table.attrs td.popup-addr {
+[data-theme] .maplibregl-popup-content table.attrs td.popup-addr {
   white-space: pre-line;
   line-height: 1.4;
+}
+
+/* MapLibre nav controls */
+[data-theme] .maplibregl-ctrl-group {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+[data-theme] .maplibregl-ctrl-group button {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+[data-theme] .maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--color-divider);
+}
+
+[data-theme] .maplibregl-ctrl-group button:hover {
+  background-color: var(--color-surface-hover);
+}
+
+/* Flip the stock icon sprite to be legible on dark surfaces. */
+[data-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(0.88) hue-rotate(180deg);
 }
 
 /* Custom 3D / tilt toggle that sits with the nav controls. */
@@ -511,28 +738,23 @@ body.map-view #map {
   height: 29px;
   font: 600 11px/1 system-ui, sans-serif;
   letter-spacing: 0.5px;
-  background: #fff;
-  color: #333;
+  background: var(--color-surface);
+  color: var(--color-text);
   border: 0;
   cursor: pointer;
 }
 
-.pitch-toggle button:hover {
-  background: #f0f0f0;
-}
+.pitch-toggle button:hover { background: var(--color-surface-hover); }
 
 .pitch-toggle.active button,
 .pitch-toggle button.active {
-  background: #3f75c4;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
 }
 
-/* ----- Directions mode (inside the search card) ------------------------
- *
- * The search card has two stacked modes (see index.html). The top-level
- * `<div data-mode="...">` wrappers are toggled via the `hidden`
- * attribute by search.js, so we don't need any display: rules here — we
- * just style the inner layout. */
+/* ============================================================
+ * Directions mode (inside the search card)
+ * ============================================================ */
 
 .directions-header {
   display: flex;
@@ -545,11 +767,9 @@ body.map-view #map {
 .directions-header__title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #202124;
+  color: var(--color-text-strong);
 }
 
-/* Two stacked inputs with a swap button pinned to the right. Uses a
-   grid so the swap spans the two rows. */
 .directions-fields {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -565,14 +785,14 @@ body.map-view #map {
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.5rem 0.25rem 0.35rem;
-  background: #f1f3f4;
+  background: var(--color-surface-sunken);
   border-radius: 6px;
   min-height: 2.25rem;
 }
 
 .directions-field:focus-within {
-  background: #fff;
-  box-shadow: inset 0 0 0 1px #1a73e8;
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .directions-marker {
@@ -581,11 +801,11 @@ body.map-view #map {
   height: 0.75rem;
   border-radius: 50%;
   background: currentColor;
-  color: #9aa0a6;
+  color: var(--color-text-muted);
 }
 
-.directions-marker--from { color: #34a853; }
-.directions-marker--to   { color: #ea4335; }
+.directions-marker--from { color: var(--color-success); }
+.directions-marker--to   { color: var(--color-danger); }
 
 .directions-input {
   flex: 1;
@@ -595,19 +815,17 @@ body.map-view #map {
   background: transparent;
   font: inherit;
   font-size: max(16px, 0.9375rem);
-  color: #202124;
+  color: var(--color-text-strong);
   padding: 0.25rem 0;
 }
 
-.directions-input::placeholder {
-  color: #80868b;
-}
+.directions-input::placeholder { color: var(--color-text-muted); }
 
 .directions-field-clear {
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: #5f6368;
+  color: var(--color-text-muted);
   border-radius: 50%;
   width: 1.5rem;
   height: 1.5rem;
@@ -618,7 +836,10 @@ body.map-view #map {
   opacity: 0.6;
 }
 
-.directions-field-clear:hover { opacity: 1; background: #e8eaed; }
+.directions-field-clear:hover {
+  opacity: 1;
+  background: var(--color-surface-hover);
+}
 
 .directions-swap-btn {
   grid-column: 2;
@@ -630,24 +851,25 @@ body.map-view #map {
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
-  border: 1px solid #dadce0;
-  background: #fff;
-  color: #5f6368;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .directions-swap-btn:hover:not(:disabled) {
-  background: #f1f3f4;
-  color: #202124;
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
 }
 
 .directions-swap-btn:disabled {
-  color: #c0c4c9;
+  color: var(--color-text-dim);
   cursor: default;
+  opacity: 0.5;
 }
 
 .search-results--directions {
-  border-top: 1px solid #e8eaed;
+  border-top: 1px solid var(--color-divider);
   max-height: 18rem;
   overflow-y: auto;
 }
@@ -655,24 +877,24 @@ body.map-view #map {
 .directions-summary {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  color: #202124;
-  border-top: 1px solid #e8eaed;
+  color: var(--color-text-strong);
+  border-top: 1px solid var(--color-divider);
 }
 
 .directions-actions {
   display: flex;
   gap: 0.4rem;
   padding: 0.5rem 0.75rem 0.75rem;
-  border-top: 1px solid #e8eaed;
+  border-top: 1px solid var(--color-divider);
 }
 
 .directions-actions button {
   flex: 1;
   min-width: 5rem;
   padding: 0.45rem 0.6rem;
-  border: 1px solid #dadce0;
-  background: #fff;
-  color: #1a73e8;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-accent);
   border-radius: 6px;
   font: inherit;
   font-weight: 500;
@@ -681,86 +903,44 @@ body.map-view #map {
 }
 
 .directions-actions button:hover:not(:disabled) {
-  background: #f1f7ff;
-  border-color: #1a73e8;
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
 }
 
 .directions-actions button:disabled {
-  color: #9aa0a6;
+  color: var(--color-text-dim);
   cursor: default;
-  background: #fff;
+  background: var(--color-surface);
+  opacity: 0.6;
 }
 
 .directions-actions button#directions-gpx-btn {
-  background: #1a73e8;
-  color: #fff;
-  border-color: #1a73e8;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
 }
 
 .directions-actions button#directions-gpx-btn:hover:not(:disabled) {
-  background: #1765cf;
-  border-color: #1765cf;
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
 }
 
 .directions-actions button#directions-gpx-btn:disabled {
-  background: #c3d4f3;
-  border-color: #c3d4f3;
-  color: #fff;
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent-bg);
+  color: var(--color-accent-contrast);
+  opacity: 0.6;
 }
 
-/* ----- Map right-click context menu ------------------------------------
- *
- * The menu is a floating block positioned at the click point by
- * routing.js. Visibility is driven by the `hidden` attribute; the
- * `[hidden]` selector below is required because `.map-context-menu`
- * sets `display: flex`, which has equal specificity to the UA-provided
- * `[hidden] { display: none }` rule and would otherwise win on load
- * order and keep the menu permanently visible. */
-.map-context-menu {
-  position: fixed;
-  z-index: 1200;
-  background: #fff;
-  border-radius: 6px;
-  box-shadow:
-    0 1px 2px rgba(60, 64, 67, 0.3),
-    0 2px 6px rgba(60, 64, 67, 0.15);
-  padding: 0.25rem 0;
-  min-width: 12rem;
-  display: flex;
-  flex-direction: column;
-  font: 13px/1.35 system-ui, sans-serif;
-}
-
-.map-context-menu[hidden] {
-  display: none;
-}
-
-.map-context-menu button {
-  border: none;
-  background: transparent;
-  text-align: left;
-  padding: 0.5rem 0.85rem;
-  font: inherit;
-  color: #202124;
-  cursor: pointer;
-}
-
-.map-context-menu button:hover,
-.map-context-menu button:focus-visible {
-  background: #f1f3f4;
-  outline: none;
-}
-
-/* "prefer elevator" chip in the directions header */
+/* "prefer elevator" chip */
 .directions-pref {
   margin-right: auto;
   margin-left: 0.5rem;
   font-size: 0.75rem;
-  color: #5f6368;
+  color: var(--color-text-muted);
 }
-.directions-pref input { margin: 0; }
+.directions-pref input { margin: 0; accent-color: var(--color-accent); }
 
-/* Each endpoint = outdoor text field + indoor autocomplete field stacked */
 .directions-endpoint {
   grid-column: 1;
   display: flex;
@@ -768,11 +948,7 @@ body.map-view #map {
   gap: 0.3rem;
 }
 
-/* ----- Scope chip --------------------------------------------------- */
-/* When the user picks a building and that building has rooms, the
-   directions field goes into "scope" mode: the chip shows the building
-   name and the input narrows searches to rooms/entrances within it.
-   Sits between .directions-marker and .directions-input. */
+/* Scope chip */
 .directions-scope {
   display: inline-flex;
   align-items: center;
@@ -780,19 +956,15 @@ body.map-view #map {
   flex-shrink: 0;
   max-width: 55%;
   padding: 0.15rem 0.2rem 0.15rem 0.5rem;
-  background: #e6efff;
-  color: #174ea6;
+  background: var(--color-chip-building-bg);
+  color: var(--color-chip-building-fg);
   font-size: 0.8125rem;
   font-weight: 500;
   border-radius: 4px;
   line-height: 1.2;
 }
 
-/* `display: inline-flex` above beats the browser's default
-   `[hidden] { display: none }`, so we explicitly opt back in. */
-.directions-scope[hidden] {
-  display: none;
-}
+.directions-scope[hidden] { display: none; }
 
 .directions-scope__label {
   overflow: hidden;
@@ -817,24 +989,20 @@ body.map-view #map {
 
 .directions-scope__clear:hover {
   opacity: 1;
-  background: rgba(23, 78, 166, 0.12);
+  background: rgba(127, 187, 179, 0.18);
 }
 
-/* The autocomplete dropdown floats below the indoor input. We reuse the
-   generic `.search-results` styles for row layout and just position/scope
-   the container here. */
+/* Autocomplete dropdown under indoor input */
 .search-results--indoor {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
   z-index: 1100;
-  background: #fff;
-  border: 1px solid #dadce0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  box-shadow:
-    0 2px 6px rgba(60, 64, 67, 0.15),
-    0 1px 2px rgba(60, 64, 67, 0.2);
+  box-shadow: var(--shadow-2);
   max-height: 18rem;
   overflow-y: auto;
 }
@@ -844,6 +1012,7 @@ body.map-view #map {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.65rem;
+  color: var(--color-text);
 }
 
 .indoor-result__icon {
@@ -851,25 +1020,58 @@ body.map-view #map {
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 50%;
-  background: #9aa0a6;
+  background: var(--color-text-muted);
 }
 
-.indoor-result--building .indoor-result__icon { background: #174ea6; border-radius: 2px; }
-.indoor-result--room     .indoor-result__icon { background: #137333; }
-.indoor-result--entrance .indoor-result__icon { background: #8a4a10; border-radius: 0; }
+.indoor-result--building .indoor-result__icon { background: var(--color-marker-building); border-radius: 2px; }
+.indoor-result--room     .indoor-result__icon { background: var(--color-marker-room); }
+.indoor-result--entrance .indoor-result__icon { background: var(--color-marker-entrance); border-radius: 0; }
 
-/* Chips on result rows to reinforce the kind (matches the existing
-   building/path/poi chips used by single-search). */
-.search-result__kind--room     { background: #e6f4ea; color: #137333; }
-.search-result__kind--entrance { background: #fdecd4; color: #8a4a10; }
+/* ============================================================
+ * Map right-click context menu
+ * ============================================================ */
 
-/* ----- Step-by-step turn list ----------------------------------------- */
+.map-context-menu {
+  position: fixed;
+  z-index: 1200;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: 6px;
+  box-shadow: var(--shadow-card);
+  padding: 0.25rem 0;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  font: 13px/1.35 system-ui, sans-serif;
+}
+
+.map-context-menu[hidden] { display: none; }
+
+.map-context-menu button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0.5rem 0.85rem;
+  font: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.map-context-menu button:hover,
+.map-context-menu button:focus-visible {
+  background: var(--color-surface-hover);
+  outline: none;
+}
+
+/* ============================================================
+ * Step-by-step turn list
+ * ============================================================ */
 
 .directions-steps {
   list-style: none;
   margin: 0;
   padding: 0.5rem 0;
-  border-top: 1px solid #e8eaed;
+  border-top: 1px solid var(--color-divider);
   max-height: 22rem;
   overflow-y: auto;
 }
@@ -878,22 +1080,22 @@ body.map-view #map {
   padding: 0.45rem 0.85rem;
   font-size: 0.875rem;
   line-height: 1.35;
-  color: #202124;
+  color: var(--color-text);
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
 }
 
 .step--phase-header {
-  background: #f8f9fa;
-  color: #5f6368;
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
   padding: 0.4rem 0.85rem;
-  border-top: 1px solid #e8eaed;
-  border-bottom: 1px solid #e8eaed;
+  border-top: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-divider);
   margin: 0.25rem 0;
   align-items: center;
 }
@@ -908,12 +1110,12 @@ body.map-view #map {
   font-size: 0.625rem;
   padding: 0.05rem 0.45rem;
   border-radius: 999px;
-  color: #fff;
+  color: var(--color-accent-contrast);
   letter-spacing: 0.03em;
   font-weight: 700;
 }
-.step__chip--indoor  { background: #137333; }
-.step__chip--outdoor { background: #1a73e8; }
+.step__chip--indoor  { background: var(--color-success); color: var(--color-accent-contrast); }
+.step__chip--outdoor { background: var(--color-accent);  color: var(--color-accent-contrast); }
 
 .step__summary, .step__text { flex: 1; min-width: 0; }
 
@@ -925,13 +1127,13 @@ body.map-view #map {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #fff;
-  background: #9aa0a6;
+  color: var(--color-accent-contrast);
+  background: var(--color-text-muted);
 }
-.step__turn--left     { background: #1a73e8; }
-.step__turn--right    { background: #e37400; }
-.step__turn--straight { background: #5f6368; }
-.step__turn--back     { background: #c5221f; }
+.step__turn--left     { background: var(--color-accent); }
+.step__turn--right    { background: var(--color-warning); }
+.step__turn--straight { background: var(--color-text-muted); }
+.step__turn--back     { background: var(--color-danger); }
 
 .phase-badge {
   display: inline-block;
@@ -939,23 +1141,22 @@ body.map-view #map {
   font-size: 0.625rem;
   padding: 0.05rem 0.35rem;
   border-radius: 3px;
-  background: #fdecd4;
-  color: #8a4a10;
+  background: var(--color-chip-path-bg);
+  color: var(--color-chip-path-fg);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 
-.step--change_floor    { background: #fff8e1; }
-.step--exit_connector  { background: #fff8e1; }
+.step--change_floor    { background: var(--color-warning-bg); }
+.step--exit_connector  { background: var(--color-warning-bg); }
 .step--arrive          { font-weight: 500; }
 .step--enter_building,
-.step--exit_building   { background: #e8f0fe; }
+.step--exit_building   { background: var(--color-accent-bg); }
 
-/* ----- Step icons (inline chip in the turn list) ---------------------
- *
- * Rendered inline before the step text. Sized to line up with the
- * existing step__turn chip so every step row has consistent leading
- * rhythm regardless of which (icon / turn / neither) is present. */
+/* ============================================================
+ * On-map markers for connectors/doors
+ * ============================================================ */
+
 .step__icon {
   flex-shrink: 0;
   display: inline-flex;
@@ -968,46 +1169,123 @@ body.map-view #map {
 }
 .step__icon svg { display: block; }
 
-/* ----- On-map markers for connectors/doors --------------------------
- *
- * Created as maplibregl.Marker DOM elements in routing.js. Each wraps
- * a raw SVG from MaristIndoor.icons at 22 px. Add a subtle white halo
- * so the glyph reads over busy sidewalk / building fills. */
 .mm-route-marker {
   width: 28px;
   height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--marker-halo);
   border-radius: 50%;
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
-    0 0 0 2px rgba(255, 255, 255, 0.9);
+    var(--shadow-1),
+    0 0 0 2px var(--marker-halo);
   pointer-events: auto;
   cursor: help;
+  color: var(--color-text-strong);
 }
 
-/* slight tint per kind so they're readable even when zoomed out */
-.mm-route-marker--door     { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 2px #5a9fff; }
-.mm-route-marker--stairs   { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 2px #daa520; }
-.mm-route-marker--elevator { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 2px #e74c3c; }
+.mm-route-marker--door     { box-shadow: var(--shadow-1), 0 0 0 2px #5a9fff; }
+.mm-route-marker--stairs   { box-shadow: var(--shadow-1), 0 0 0 2px #daa520; }
+.mm-route-marker--elevator { box-shadow: var(--shadow-1), 0 0 0 2px #e74c3c; }
+
+/* ============================================================
+ * Theme toggle
+ * ============================================================ */
+
+.theme-toggle {
+  --tt-track-w: 2.6rem;
+  --tt-track-h: 1.4rem;
+  --tt-gap: 0.15rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  user-select: none;
+}
+
+.theme-toggle__track {
+  position: relative;
+  display: inline-block;
+  width: var(--tt-track-w);
+  height: var(--tt-track-h);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  transition: background 180ms ease, border-color 180ms ease;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .theme-toggle__track {
+  background: var(--ef-bg3);
+}
+
+.theme-toggle__thumb {
+  position: absolute;
+  top: var(--tt-gap);
+  left: var(--tt-gap);
+  width: calc(var(--tt-track-h) - 2 * var(--tt-gap) - 2px);
+  height: calc(var(--tt-track-h) - 2 * var(--tt-gap) - 2px);
+  background: var(--color-surface);
+  color: var(--color-text-strong);
+  border-radius: 50%;
+  box-shadow: var(--shadow-1);
+  display: grid;
+  place-items: center;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              background 180ms ease, color 180ms ease;
+  transform: translateX(
+    calc(var(--tt-track-w) - var(--tt-track-h))
+  );
+}
+
+[data-theme="light"] .theme-toggle__thumb {
+  transform: translateX(0);
+  color: var(--color-warning);
+}
+
+.theme-toggle__icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+/* Sun shown in light mode, moon in dark — driven by the theme attr. */
+[data-theme="light"] .theme-toggle__icon--moon { display: none; }
+[data-theme="dark"]  .theme-toggle__icon--sun  { display: none; }
+
+.theme-toggle--floating {
+  position: absolute;
+  z-index: 1100;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  padding: 0.35rem 0.55rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: 999px;
+  box-shadow: var(--shadow-2);
+  border: 1px solid var(--color-border);
+}
+
+.theme-toggle--floating:hover {
+  background: var(--color-surface-hover);
+}
+
+.theme-toggle--floating:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 
 /* ============================================================
  * Mobile + small-viewport tweaks
- * ============================================================
- *
- * Two breakpoints:
- *   - narrow screens (phones, portrait tablets): shrink padding, clamp
- *     the step list to a fraction of viewport height, bump touch targets
- *   - short screens (landscape phones): further clamp step list and
- *     directions summary so the map stays visible
- *
- * Uses dvh (dynamic viewport height) with a vh fallback so browser UI
- * appearing/disappearing on mobile doesn't hide the controls. */
+ * ============================================================ */
 
 @media (max-width: 640px) {
-  /* Overlay card takes the full width of the usable overlay region. */
   .search-overlay {
     max-width: none;
     top: max(8px, env(safe-area-inset-top));
@@ -1015,7 +1293,6 @@ body.map-view #map {
     right: max(8px, env(safe-area-inset-right));
   }
 
-  /* Slightly tighter search bar row — a 48px target is still hittable. */
   .search-bar-row {
     min-height: 2.75rem;
     padding: 0 0.5rem;
@@ -1026,7 +1303,6 @@ body.map-view #map {
     height: 2.75rem;
   }
 
-  /* Directions fields: roomier tap area, tighter gaps between rows. */
   .directions-fields {
     gap: 0.3rem 0.3rem;
     padding: 0.25rem 0.5rem 0.5rem;
@@ -1037,88 +1313,59 @@ body.map-view #map {
     padding: 0.3rem 0.5rem;
   }
 
-  .directions-field-clear {
-    width: 2rem;
-    height: 2rem;
-  }
+  .directions-field-clear { width: 2rem; height: 2rem; }
 
-  .directions-swap-btn {
-    width: 2.4rem;
-    height: 2.4rem;
-  }
+  .directions-swap-btn { width: 2.4rem; height: 2.4rem; }
 
-  /* Step list: the main culprit on small screens. Clamp hard so the
-     user can still see the map underneath. Scroll if overflow. */
   .directions-steps {
     max-height: min(18rem, 38vh);
     max-height: min(18rem, 38dvh);
   }
 
-  .step {
-    padding: 0.5rem 0.7rem;
-  }
+  .step { padding: 0.5rem 0.7rem; }
 
-  /* Action row: stack vertically if very narrow, otherwise wider tap
-     targets. */
   .directions-actions button {
     padding: 0.6rem 0.6rem;
     min-height: 2.5rem;
   }
 
-  /* Single-search results also clamp on tiny screens. */
   .search-results {
     max-height: min(22rem, 55vh);
     max-height: min(22rem, 55dvh);
     overflow-y: auto;
   }
 
-  /* Map connector markers scale down slightly so they don't eat the
-     narrow viewport. */
   .mm-route-marker {
     width: 24px;
     height: 24px;
   }
   .mm-route-marker svg { width: 18px; height: 18px; }
+
+  .theme-toggle--floating {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
 }
 
-/* Very narrow (≤ 380 px): hide the "prefer elevator" label text; keep
-   the checkbox. */
 @media (max-width: 380px) {
-  .directions-pref span {
-    display: none;
-  }
-  .directions-header__title {
-    font-size: 0.875rem;
-  }
+  .directions-pref span { display: none; }
+  .directions-header__title { font-size: 0.875rem; }
 }
 
-/* Landscape phones: viewport is wide but very short. Map visibility
-   matters more here, so cap the step list even lower. */
 @media (orientation: landscape) and (max-height: 500px) {
   .directions-steps {
     max-height: min(10rem, 45vh);
     max-height: min(10rem, 45dvh);
   }
-  /* Stack From/To inputs more compactly. */
   .directions-field { min-height: 2.1rem; }
 }
 
-/* Touch-first environments: make the hover-only popup styling not
-   disappear on tap (already works via MapLibre), but also ensure the
-   right-click-style context menu tolerates long-press spacing. */
 @media (pointer: coarse) {
   .map-context-menu button {
     padding: 0.75rem 1rem;
     font-size: 0.9rem;
   }
-  .directions-actions button {
-    min-height: 2.75rem;
-  }
-  .search-result {
-    padding: 0.85rem 1rem;
-  }
-  .indoor-result {
-    padding: 0.7rem 0.8rem;
-  }
+  .directions-actions button { min-height: 2.75rem; }
+  .search-result { padding: 0.85rem 1rem; }
+  .indoor-result { padding: 0.7rem 0.8rem; }
 }
-

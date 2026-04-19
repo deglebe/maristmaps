@@ -4,6 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}maristmaps{% endblock %}</title>
+  {# Inline so the theme attribute is set before stylesheets paint —
+     otherwise the page flashes light on every cold load. Default is
+     dark; reads a user-saved preference from localStorage if present. #}
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('maristmaps.theme');
+        var theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (_) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block head %}{% endblock %}
 </head>
@@ -25,5 +39,9 @@
   <main>
   {% block content %}{% endblock %}
   </main>
+  {# Theme toggle + event bus. Loaded on every page that extends base,
+     so the floating toggle and the `mmap:theme-change` event are
+     always available (map pages listen for the event to repaint). #}
+  <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
 </body>
 </html>
