@@ -1,0 +1,52 @@
+# Caddy v2 config for maristmaps.
+#
+# $DOMAIN and $ACME_EMAIL come from the .env file that docker compose
+# reads. Caddy auto-provisions a Let's Encrypt cert for $DOMAIN on
+# first request to :443, then renews in the background.
+#
+# Route layout:
+#   /tiles/*  -> martin:3000 (prefix stripped by handle_path)
+#   /*        -> web:8000    (gunicorn)
+
+{
+	email {$ACME_EMAIL}
+	# Uncomment during DNS setup to avoid hitting LE rate limits while
+	# you're iterating on the config:
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Vector tiles: strip /tiles prefix so martin sees its native paths.
+	# e.g. /tiles/planet_osm_polygon/16/1/1 -> /planet_osm_polygon/16/1/1
+	handle_path /tiles/* {
+		reverse_proxy martin:3000 {
+			header_up Host {http.reverse_proxy.upstream.hostport}
+		}
+		header Cache-Control "public, max-age=86400"
+	}
+
+	# Everything else is the Flask app.
+	handle {
+		reverse_proxy web:8000 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host  {host}
+		}
+	}
+
+	# Minimal security headers. Flask/Jinja doesn't set CSP itself and
+	# MapLibre needs WebGL + blob: workers, so keep CSP permissive.
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy        "strict-origin-when-cross-origin"
+		# HSTS: 6 months, include subdomains. Caddy only serves HTTPS
+		# so this is safe once $DOMAIN resolves to this box.
+		Strict-Transport-Security "max-age=15552000; includeSubDomains"
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

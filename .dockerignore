@@ -1,0 +1,29 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+*.sqlite3
+*.swp
+*.swo
+.vscode
+.idea
+.DS_Store
+
+# Big binaries we don't want in the image context. The init container
+# mounts ./pbf as a read-only volume instead, so it doesn't need them.
+# The web image never touches them.
+pbf/*.osm.pbf
+!pbf/.gitkeep
+
+# Agent transcripts / logs (if any local leftovers)
+*.log
+logs/
