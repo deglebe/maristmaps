@@ -638,17 +638,22 @@ body.map-view #map {
 }
 
 [data-theme] .maplibregl-popup-content table.attrs {
-.maplibregl-popup-content .popup-actions {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+[data-theme] .maplibregl-popup-content .popup-actions {
   display: flex;
   gap: 0.4rem;
   margin-top: 0.55rem;
 }
 
-.maplibregl-popup-content .popup-action {
+[data-theme] .maplibregl-popup-content .popup-action {
   flex: 1 1 auto;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  color: #1a73e8;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-accent);
   border-radius: 6px;
   padding: 0.35rem 0.55rem;
   font: 600 12px/1.2 system-ui, sans-serif;
@@ -656,30 +661,24 @@ body.map-view #map {
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.maplibregl-popup-content .popup-action:hover,
-.maplibregl-popup-content .popup-action:focus-visible {
-  background: #eef4ff;
-  border-color: #1a73e8;
+[data-theme] .maplibregl-popup-content .popup-action:hover,
+[data-theme] .maplibregl-popup-content .popup-action:focus-visible {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
   outline: none;
 }
 
-.maplibregl-popup-content .popup-action--to {
-  background: #1a73e8;
-  color: #fff;
-  border-color: #1a73e8;
+[data-theme] .maplibregl-popup-content .popup-action--to {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
 }
 
-.maplibregl-popup-content .popup-action--to:hover,
-.maplibregl-popup-content .popup-action--to:focus-visible {
-  background: #1664c4;
-  border-color: #1664c4;
-  color: #fff;
-}
-
-.maplibregl-popup-content table.attrs {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 12px;
+[data-theme] .maplibregl-popup-content .popup-action--to:hover,
+[data-theme] .maplibregl-popup-content .popup-action--to:focus-visible {
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+  color: var(--color-accent-contrast);
 }
 
 [data-theme] .maplibregl-popup-content table.attrs th,
