@@ -13,8 +13,12 @@ from app.locations import (
     normalize_room_code,
     resolve_building_for_agent,
 )
-from app.osm_features import find_osm_destination, list_osm_destinations
+from app.osm_features import (
+    find_osm_destination,
+    list_osm_destinations,
+)
 from agent.nav_context import stash_navigation_plan
+import difflib
 
 log = get_logger("tools")
 
@@ -42,27 +46,45 @@ def find_place(query: str, limit: int = 5) -> str:
         return "PLACES_NONE: Empty query."
     cap = max(1, min(int(limit or 5), 10))
 
-    out: list[str] = []
     rlow = raw.lower()
+    if rlow.startswith("the "):
+        rlow = rlow[4:]
+    tokens = [t for t in rlow.split() if t]
     indoor = list_buildings()
 
-    indoor_hits = [b for b in indoor if rlow in b.lower() or b.lower() in rlow]
-    indoor_hits.sort(key=lambda b: (len(b), b.lower()))
-    for b in indoor_hits[:cap]:
+    def score(name: str) -> float:
+        nl = name.lower()
+        if nl == rlow:
+            return 1.0
+        if nl.startswith(rlow) or rlow.startswith(nl):
+            return 0.95
+        if rlow in nl or nl in rlow:
+            return 0.9
+        if tokens and all(t in nl for t in tokens):
+            return 0.85
+        return difflib.SequenceMatcher(None, rlow, nl).ratio()
+
+    out: list[str] = []
+    seen_lower: set[str] = set()
+
+    indoor_scored = [(score(b), b) for b in indoor]
+    indoor_scored = [(s, b) for s, b in indoor_scored if s >= 0.6]
+    indoor_scored.sort(key=lambda r: (-r[0], len(r[1]), r[1].lower()))
+    for _, b in indoor_scored[:cap]:
         out.append(f"indoor_building:{b} (rooms available)")
+        seen_lower.add(b.lower())
 
     if len(out) < cap:
-        seen_lower = {b.lower() for b in indoor_hits}
-        osm_hits = []
+        osm_scored: list[tuple[float, object]] = []
         for f in list_osm_destinations():
             n = (f.name or "").strip()
             if not n or n.lower() in seen_lower:
                 continue
-            nl = n.lower()
-            if rlow in nl or nl in rlow or all(t in nl for t in rlow.split() if t):
-                osm_hits.append(f)
-        osm_hits.sort(key=lambda f: (len(f.name), f.name.lower()))
-        for f in osm_hits[: cap - len(out)]:
+            s = score(n)
+            if s >= 0.6:
+                osm_scored.append((s, f))
+        osm_scored.sort(key=lambda r: (-r[0], len(r[1].name), r[1].name.lower()))
+        for _, f in osm_scored[: cap - len(out)]:
             sub = f.subtitle or f.kind
             out.append(f"{f.kind}:{f.name} ({sub})")
 
