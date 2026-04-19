@@ -1,0 +1,5 @@
+#,Kind,Subtype,Orientation,Closest entrance,Closest entrance (elevator),Building,Floor,Room,Latitude,Longitude,Notes,Closest stair,Closest elevator,Direction from connector,Connections,Date,Time,Timestamp
+1,entrance,,SW,,,Lowell Thomas,1,Side,41.723172,-73.933289,,,,,,19 Apr 2026,16:10:17,2026-04-19T20:10:17.815Z
+2,entrance,,SE,,,Lowell Thomas,1,Main,41.723246,-73.932705,,,,,,19 Apr 2026,16:10:29,2026-04-19T20:10:29.087Z
+3,entrance,,NW,,,Lowell Thomas,1,Back,41.723666,-73.932855,,,,,,19 Apr 2026,16:10:40,2026-04-19T20:10:40.857Z
+4,entrance,,NE,,,Lowell Thomas,1,Back,41.723648,-73.93273,,,,,,19 Apr 2026,16:10:54,2026-04-19T20:10:54.122Z

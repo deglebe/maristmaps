@@ -1,0 +1,4 @@
+#,Kind,Subtype,Orientation,Closest entrance,Closest entrance (elevator),Building,Floor,Room,Latitude,Longitude,Notes,Closest stair,Closest elevator,Direction from connector,Connections,Date,Time,Timestamp
+1,entrance,,W,,,Library,1,Main,41.721701,-73.934403,,,,,,19 Apr 2026,16:09:23,2026-04-19T20:09:23.224Z
+2,entrance,,E,,,Library,2,Back,41.721671,-73.933901,,,,,,19 Apr 2026,16:09:37,2026-04-19T20:09:37.601Z
+3,entrance,,E,,,Library,1,Side,41.722252,-73.933983,,,,,,19 Apr 2026,16:09:49,2026-04-19T20:09:49.946Z
