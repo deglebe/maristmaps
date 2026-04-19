@@ -63,8 +63,16 @@
         </div>
         <div class="directions-fields">
           <div class="directions-endpoint">
-            <div class="directions-field">
+            <div class="directions-field" data-side="from">
               <span class="directions-marker directions-marker--from" aria-hidden="true"></span>
+              <span class="directions-scope" id="directions-scope-from" hidden>
+                <span class="directions-scope__label"></span>
+                <button type="button" class="directions-scope__clear" aria-label="Remove building scope" tabindex="-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                    <path d="M18 6 6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+              </span>
               <input
                 class="directions-input"
                 id="directions-from"
@@ -79,27 +87,18 @@
                 </svg>
               </button>
             </div>
-            <div class="directions-indoor-wrap">
-              <input
-                class="directions-indoor-input"
-                id="directions-from-indoor"
-                type="text"
-                autocomplete="off"
-                aria-label="From room, entrance, or building"
-                aria-controls="directions-from-indoor-results"
-                placeholder="Room, entrance, or building (optional)…"
-              >
-              <button type="button" class="directions-field-clear directions-indoor-clear" id="directions-clear-from-indoor-btn" aria-label="Clear from indoor" tabindex="-1">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M18 6 6 18M6 6l12 12"/>
-                </svg>
-              </button>
-              <ul class="search-results search-results--indoor" id="directions-from-indoor-results" role="listbox" hidden></ul>
-            </div>
           </div>
           <div class="directions-endpoint">
-            <div class="directions-field">
+            <div class="directions-field" data-side="to">
               <span class="directions-marker directions-marker--to" aria-hidden="true"></span>
+              <span class="directions-scope" id="directions-scope-to" hidden>
+                <span class="directions-scope__label"></span>
+                <button type="button" class="directions-scope__clear" aria-label="Remove building scope" tabindex="-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                    <path d="M18 6 6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+              </span>
               <input
                 class="directions-input"
                 id="directions-to"
@@ -113,23 +112,6 @@
                   <path d="M18 6 6 18M6 6l12 12"/>
                 </svg>
               </button>
-            </div>
-            <div class="directions-indoor-wrap">
-              <input
-                class="directions-indoor-input"
-                id="directions-to-indoor"
-                type="text"
-                autocomplete="off"
-                aria-label="To room, entrance, or building"
-                aria-controls="directions-to-indoor-results"
-                placeholder="Room, entrance, or building (optional)…"
-              >
-              <button type="button" class="directions-field-clear directions-indoor-clear" id="directions-clear-to-indoor-btn" aria-label="Clear to indoor" tabindex="-1">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M18 6 6 18M6 6l12 12"/>
-                </svg>
-              </button>
-              <ul class="search-results search-results--indoor" id="directions-to-indoor-results" role="listbox" hidden></ul>
             </div>
           </div>
           <button type="button" class="directions-swap-btn" id="directions-swap-btn" aria-label="Swap start and destination" disabled>

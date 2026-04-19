@@ -264,7 +264,11 @@ body.app-shell--map .flash {
 
 .search-result__icon {
   flex-shrink: 0;
-  margin-top: 0.125rem;
+  margin-top: 0.4rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #9aa0a6;
   color: #5f6368;
 }
 
@@ -315,6 +319,39 @@ body.app-shell--map .flash {
 .search-result__kind--building { background: #e6efff; color: #174ea6; }
 .search-result__kind--path     { background: #fdecd4; color: #8a4a10; }
 .search-result__kind--poi      { background: #e6f4ea; color: #137333; }
+
+/* Small colored dot markers for single-search result rows, echoing the
+   palette used by .indoor-result--kind so the two surfaces feel like
+   one system. */
+.search-result__icon--building { background: #174ea6; border-radius: 2px; }
+.search-result__icon--room     { background: #137333; }
+.search-result__icon--entrance { background: #8a4a10; border-radius: 0; }
+.search-result__icon--poi      { background: #137333; }
+.search-result__icon--path     { background: #8a4a10; border-radius: 1px; }
+
+/* Rooms nested under a matched building render one level indented so
+   the grouping reads at a glance. */
+.search-result--child {
+  padding-left: 2rem;
+  background: #fafbfc;
+}
+.search-result--child:hover,
+.search-result--child:focus {
+  background: #f1f3f4;
+}
+.search-result--child .search-result__icon {
+  opacity: 0.85;
+}
+
+/* Non-interactive footer row telling the user there are more matches
+   than we're showing so they refine their search. */
+.search-result--more {
+  cursor: default;
+  padding: 0.4rem 1rem 0.6rem 2rem;
+  font-size: 0.75rem;
+  color: #70757a;
+  background: #fafbfc;
+}
 
 /* Bare standalone map page (no app-shell / search overlay). */
 body.map-view {
@@ -651,47 +688,56 @@ body.map-view #map {
   gap: 0.3rem;
 }
 
-/* The indoor input lives in a positioned wrapper so its dropdown
-   (the <ul>) can absolutely position below it. */
-.directions-indoor-wrap {
-  position: relative;
+/* ----- Scope chip --------------------------------------------------- */
+/* When the user picks a building and that building has rooms, the
+   directions field goes into "scope" mode: the chip shows the building
+   name and the input narrows searches to rooms/entrances within it.
+   Sits between .directions-marker and .directions-input. */
+.directions-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  max-width: 55%;
+  padding: 0.15rem 0.2rem 0.15rem 0.5rem;
+  background: #e6efff;
+  color: #174ea6;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+/* `display: inline-flex` above beats the browser's default
+   `[hidden] { display: none }`, so we explicitly opt back in. */
+.directions-scope[hidden] {
+  display: none;
+}
+
+.directions-scope__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directions-scope__clear {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  border-radius: 50%;
+  width: 1rem;
+  height: 1rem;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.5rem 0.2rem 1.4rem;
-  background: #f8f9fa;
-  border: 1px dashed #dadce0;
-  border-radius: 6px;
-  min-height: 2rem;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.7;
 }
 
-.directions-indoor-wrap:focus-within {
-  background: #fff;
-  border-style: solid;
-  border-color: #1a73e8;
-  box-shadow: inset 0 0 0 1px #1a73e8;
-}
-
-.directions-indoor-input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  font-size: max(15px, 0.875rem);
-  color: #202124;
-  padding: 0.2rem 0;
-}
-
-.directions-indoor-input::placeholder {
-  color: #9aa0a6;
-  font-style: italic;
-}
-
-.directions-indoor-clear {
-  width: 1.25rem;
-  height: 1.25rem;
+.directions-scope__clear:hover {
+  opacity: 1;
+  background: rgba(23, 78, 166, 0.12);
 }
 
 /* The autocomplete dropdown floats below the indoor input. We reuse the
@@ -921,21 +967,6 @@ body.map-view #map {
     height: 2.4rem;
   }
 
-  .directions-indoor-wrap {
-    padding-left: 0.75rem;
-    min-height: 2.3rem;
-  }
-
-  .directions-indoor-input {
-    font-size: max(16px, 0.9rem); /* 16px floor prevents iOS zoom */
-  }
-
-  /* Indoor autocomplete should not cover the whole screen. */
-  .search-results--indoor {
-    max-height: min(14rem, 40vh);
-    max-height: min(14rem, 40dvh);
-  }
-
   /* Step list: the main culprit on small screens. Clamp hard so the
      user can still see the map underneath. Scroll if overflow. */
   .directions-steps {
@@ -988,13 +1019,8 @@ body.map-view #map {
     max-height: min(10rem, 45vh);
     max-height: min(10rem, 45dvh);
   }
-  .search-results--indoor {
-    max-height: min(10rem, 50vh);
-    max-height: min(10rem, 50dvh);
-  }
   /* Stack From/To inputs more compactly. */
   .directions-field { min-height: 2.1rem; }
-  .directions-indoor-wrap { min-height: 2rem; }
 }
 
 /* Touch-first environments: make the hover-only popup styling not
