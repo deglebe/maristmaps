@@ -6,6 +6,9 @@
  *  - The MapLibre source/layers that render the computed route as a
  *    white-cased blue line plus two endpoint dots.
  *  - Calls to /api/route and /api/route.gpx.
+ *  - A Z-assignment pass that promotes the flat route polyline into a
+ *    stack of altitude-tagged segments (one per floor) and hands them
+ *    to MaristRoute3D for 3D rendering when the map is tilted.
  *
  * Deliberately owns no sidebar DOM. Whenever state changes, we dispatch
  * `mmap:route-changed` on `document` with the current {from, to, route}
@@ -21,11 +24,31 @@
   const ROUTE_ENDPOINTS_SOURCE = 'mm-route-endpoints';
   const ROUTE_ENDPOINTS_LAYER = 'mm-route-endpoints-layer';
 
+  // ---- 3D altitude config ---------------------------------------------
+  //
+  // Mental model: floor 1 (the ground floor) sits at z=0, same as the
+  // outdoor ground plane. Floor N sits at (N-1) * FLOOR_HEIGHT_M. Floor
+  // 0 (basement) is below ground at -FLOOR_HEIGHT_M. This keeps the
+  // route flat through indoor-outdoor-indoor transitions at ground-floor
+  // entrances — no weird pops at doors. Altitude changes only happen at
+  // stairwell/elevator connectors, and at the rare basement entrance.
+  const FLOOR_HEIGHT_M = 2.75;
+  const GROUND_ALT_M = 0;
+
+  function altForFloor(floor) {
+    if (floor === null || floor === undefined) return GROUND_ALT_M;
+    const n = Number(floor);
+    if (!Number.isFinite(n)) return GROUND_ALT_M;
+    // Floor 1 = ground = z=0; floor 2 = 2.75m; floor 0 (basement) = -2.75m.
+    return (n - 1) * FLOOR_HEIGHT_M;
+  }
+
   const state = {
     from: null,    // { lon, lat, label }
     to: null,      // { lon, lat, label }
     route: null,   // server response from /api/route
     inflight: null, // AbortController for the current /api/route call
+    in3d: false,   // mirrors map.js's pitch-based 3D toggle
   };
 
   let _map = null;
@@ -179,6 +202,333 @@
     });
   }
 
+  // ---- Z-assignment pass ----------------------------------------------
+  //
+  // Walks the route's phases and produces a structure that MaristRoute3D
+  // can consume directly. Each `segment` is a polyline of [lon, lat, zM]
+  // triples. We emit separate segments at connector transitions so each
+  // leg is on a single floor and the change-floor point shows as a
+  // crisp instantaneous vertical (the L-shape).
+  //
+  // Output shape (matches route3d.js setRoute contract):
+  //   {
+  //     segments: [{ coords: [[lon,lat,z], ...] }, ...],
+  //     endpoints: { start: [lon,lat,z], end: [lon,lat,z] }
+  //   }
+  //
+  // Rules (all locked in the handoff):
+  //   - indoor phase on a single floor => polyline at altForFloor(from_floor)
+  //   - indoor phase crossing floors   => split at the change_floor step;
+  //     emit leg1 at from_floor, an L-shape at the connector point, and
+  //     leg2 at to_floor
+  //   - outdoor phase                  => polyline at ground (0 m)
+  //   - bridge phase (zero-length)     => inherits the *entering* side's
+  //     from_floor via a zero-length vertical join
+  //   - indoor<->outdoor transitions   => instantaneous vertical snap
+  //     (handled by consecutive segments meeting at an entrance point)
+  function buildAltitudePolylines(route) {
+    if (!route || !Array.isArray(route.phases)) return null;
+    const segments = [];
+
+    // Push a polyline at a constant altitude. Skips degenerate 0/1-point
+    // inputs (Line2 crashes on <2 verts).
+    const pushConstAlt = (polyline, altM) => {
+      if (!Array.isArray(polyline) || polyline.length < 2) return;
+      const coords = [];
+      for (const p of polyline) {
+        if (!Array.isArray(p) || p.length < 2) continue;
+        coords.push([Number(p[0]), Number(p[1]), altM]);
+      }
+      if (coords.length >= 2) segments.push({ coords });
+    };
+
+    // Instantaneous vertical jump: two verts at the same (lon,lat) so
+    // Line2 renders a clean vertical with no diagonal interpolation.
+    const pushVerticalJump = (pt, fromZ, toZ) => {
+      if (!pt || !Array.isArray(pt) || pt.length < 2) return;
+      if (fromZ === toZ) return;
+      segments.push({
+        coords: [
+          [Number(pt[0]), Number(pt[1]), fromZ],
+          [Number(pt[0]), Number(pt[1]), toZ],
+        ],
+      });
+    };
+
+    // --- Pass 1: compute each phase's altitude profile ---
+    //
+    // Every non-skip phase ends up with { startZ, endZ } describing what
+    // altitude the route is at when entering and leaving that phase.
+    //
+    // Indoor (non-bridge) phases: read from_floor / to_floor directly.
+    // Outdoor + bridge phases: mark as "pending", resolved in the next
+    // pass by looking at neighbouring indoor phases. Outdoor sits at
+    // whatever floor the adjacent entrances are on (floor 1 = z=0 in
+    // almost every case), so that entrance transitions don't produce
+    // jarring vertical jumps — the route stays flat through the door.
+    // The only places altitude visibly changes are stairwell/elevator
+    // connectors and (rarely) basement-level outdoor entrances.
+    const profiles = route.phases.map((phase) => {
+      if (!phase || phase.error) return { kind: 'skip' };
+      if (phase.kind === 'outdoor') {
+        return { kind: 'outdoor' }; // startZ / endZ resolved next
+      }
+      if (phase.kind !== 'indoor') return { kind: 'skip' };
+
+      const steps = Array.isArray(phase.steps) ? phase.steps : [];
+      const isBridge = steps.length === 1 && steps[0] && steps[0].kind === 'bridge';
+      if (isBridge) {
+        return { kind: 'bridge' }; // startZ / endZ resolved next
+      }
+      return {
+        kind: 'indoor',
+        startZ: altForFloor(phase.from_floor),
+        endZ: altForFloor(phase.to_floor),
+      };
+    });
+
+    // Resolve outdoor + bridge altitudes from neighbours. These share
+    // the same inheritance rule: look at the previous indoor phase's
+    // endZ and the next indoor phase's startZ.
+    const prevResolvedEndZ = (idx) => {
+      for (let j = idx - 1; j >= 0; j--) {
+        const p = profiles[j];
+        if (p.kind === 'indoor') return p.endZ;
+        if ((p.kind === 'outdoor' || p.kind === 'bridge')
+            && p.endZ !== undefined) return p.endZ;
+      }
+      return null;
+    };
+    const nextResolvedStartZ = (idx) => {
+      for (let j = idx + 1; j < profiles.length; j++) {
+        const p = profiles[j];
+        if (p.kind === 'indoor') return p.startZ;
+      }
+      return null;
+    };
+    for (let i = 0; i < profiles.length; i++) {
+      const p = profiles[i];
+      if (p.kind !== 'bridge' && p.kind !== 'outdoor') continue;
+      let sz = prevResolvedEndZ(i);
+      let ez = nextResolvedStartZ(i);
+      if (sz === null && ez === null) { sz = GROUND_ALT_M; ez = GROUND_ALT_M; }
+      else if (sz === null) sz = ez;
+      else if (ez === null) ez = sz;
+      p.startZ = sz;
+      p.endZ = ez;
+    }
+
+    // --- Pass 2: emit segments ---
+    for (let i = 0; i < route.phases.length; i++) {
+      const phase = route.phases[i];
+      const profile = profiles[i];
+      if (!phase || !profile || profile.kind === 'skip') continue;
+
+      if (profile.kind === 'outdoor') {
+        // Outdoor polyline sits at the altitude of the entrances it
+        // connects (usually floor 1 = z=0). If the two ends somehow
+        // differ (e.g. basement entrance on one side), we split the
+        // outdoor polyline half-and-half for v1 — good enough given
+        // entrances at weird floors are vanishingly rare in the data.
+        if (profile.startZ === profile.endZ) {
+          pushConstAlt(phase.polyline, profile.startZ);
+        } else {
+          const poly = phase.polyline || [];
+          if (poly.length >= 2) {
+            const mid = Math.floor(poly.length / 2);
+            pushConstAlt(poly.slice(0, mid + 1), profile.startZ);
+            pushVerticalJump(poly[mid], profile.startZ, profile.endZ);
+            pushConstAlt(poly.slice(mid), profile.endZ);
+          }
+        }
+        continue;
+      }
+
+      if (profile.kind === 'bridge') {
+        // A bridge has exactly two points: A (entering side, e.g. Rotunda
+        // Midrise Entrance) and B (exiting side, e.g. Midrise Rotunda
+        // Entrance). Each side has its OWN floor in its home building
+        // (Rotunda calls this floor 1, Midrise calls it floor 3). We
+        // draw point A at startZ, make the vertical transition at B
+        // (since B is the one that needs to match the next phase's floor),
+        // and leave point B at endZ for the next phase to pick up.
+        //
+        //    A@startZ ----- B@startZ
+        //                   |
+        //                   B@endZ  (vertical at B)
+        //
+        // If startZ == endZ the vertical jump is a no-op.
+        const poly = phase.polyline || [];
+        if (poly.length >= 2) {
+          const A = poly[0];
+          const B = poly[poly.length - 1];
+          // Horizontal across the bridge at the entering-side altitude.
+          pushConstAlt([A, B], profile.startZ);
+          // Vertical at B to match the exiting side's altitude.
+          pushVerticalJump(B, profile.startZ, profile.endZ);
+        }
+        continue;
+      }
+
+      // profile.kind === 'indoor' (real indoor traversal, not a bridge)
+
+      const steps = Array.isArray(phase.steps) ? phase.steps : [];
+      const fromZ = profile.startZ;
+      const toZ = profile.endZ;
+
+      // Single-floor indoor phase is trivial.
+      if (fromZ === toZ) {
+        pushConstAlt(phase.polyline, fromZ);
+        continue;
+      }
+
+      // Cross-floor indoor phase. The rule you want:
+      //   walk in at fromZ up to the stair, jump vertically AT the
+      //   stair, walk out at toZ.
+      //
+      // The phase's step list always contains exactly one `change_floor`
+      // step between the walk_to_connector and exit_connector steps. We
+      // split the step list at change_floor, gather each half's polyline
+      // points, and emit:
+      //   leg1 (everything before change_floor) at fromZ
+      //   vertical jump at the connector
+      //   leg2 (everything after change_floor) at toZ
+      //
+      // Step polylines overlap at step boundaries, so we dedupe adjacent
+      // duplicate (lon,lat) pairs while gathering.
+      const leg1 = [];
+      const leg2 = [];
+      let connectorPt = null;
+      let passedConnector = false;
+
+      const pushUnique = (bucket, pt) => {
+        if (!Array.isArray(pt) || pt.length < 2) return;
+        const last = bucket[bucket.length - 1];
+        if (last && last[0] === pt[0] && last[1] === pt[1]) return;
+        bucket.push(pt);
+      };
+
+      for (const step of steps) {
+        if (!step) continue;
+        const sp = Array.isArray(step.polyline) ? step.polyline : [];
+        if (step.kind === 'change_floor') {
+          connectorPt = sp[0] || null;
+          passedConnector = true;
+          continue; // the jump is emitted below, not as a bucket push
+        }
+        const bucket = passedConnector ? leg2 : leg1;
+        for (const p of sp) pushUnique(bucket, p);
+      }
+
+      // Defensive fallback: if we somehow didn't see a change_floor step,
+      // draw the whole thing at fromZ rather than emit nothing.
+      if (!connectorPt) {
+        pushConstAlt(phase.polyline, fromZ);
+        continue;
+      }
+
+      // Guarantee leg1 terminates at connectorPt and leg2 starts at it,
+      // so the three pieces (leg1, vertical, leg2) join cleanly in
+      // (lon,lat) space — only the z changes at the stair.
+      const last1 = leg1[leg1.length - 1];
+      if (!last1 || last1[0] !== connectorPt[0] || last1[1] !== connectorPt[1]) {
+        leg1.push(connectorPt);
+      }
+      const first2 = leg2[0];
+      if (!first2 || first2[0] !== connectorPt[0] || first2[1] !== connectorPt[1]) {
+        leg2.unshift(connectorPt);
+      }
+
+      pushConstAlt(leg1, fromZ);
+      pushVerticalJump(connectorPt, fromZ, toZ);
+      pushConstAlt(leg2, toZ);
+    }
+
+    // --- Pass 3: stitch indoor↔outdoor transitions ---
+    //
+    // At a building entrance, the indoor phase ends at floor-1 altitude
+    // (≈2.75 m) while the adjoining outdoor phase is at ground (0 m). If
+    // we leave a gap, the Three.js scene shows two disconnected lines
+    // with a hole at the door. Walk consecutive segment endpoints in
+    // order and inject an instantaneous vertical jump at every (lon,lat)
+    // match that has a z mismatch. This also catches Hancock-side and
+    // Rotunda-side entrance transitions without needing any special case
+    // logic for each; we just look at geometry.
+    const stitched = [];
+    for (let i = 0; i < segments.length; i++) {
+      if (i > 0) {
+        const prev = segments[i - 1].coords;
+        const curr = segments[i].coords;
+        const prevEnd = prev[prev.length - 1];
+        const currStart = curr[0];
+        const sameXY = (
+          Math.abs(prevEnd[0] - currStart[0]) < 1e-9
+          && Math.abs(prevEnd[1] - currStart[1]) < 1e-9
+        );
+        const zGap = Math.abs(prevEnd[2] - currStart[2]);
+        if (sameXY && zGap > 1e-6) {
+          stitched.push({
+            coords: [
+              [prevEnd[0], prevEnd[1], prevEnd[2]],
+              [currStart[0], currStart[1], currStart[2]],
+            ],
+          });
+        }
+      }
+      stitched.push(segments[i]);
+    }
+    segments.length = 0;
+    for (const s of stitched) segments.push(s);
+
+    // Endpoints: sphere positions come from the first/last meaningful
+    // vertex we emitted. We pull these straight from the segments list
+    // rather than from route.trackpoints because trackpoints is flat
+    // (no altitude).
+    let startPt = null;
+    let endPt = null;
+    if (segments.length) {
+      const first = segments[0].coords[0];
+      const lastSeg = segments[segments.length - 1].coords;
+      const lastVtx = lastSeg[lastSeg.length - 1];
+      startPt = [first[0], first[1], first[2]];
+      endPt = [lastVtx[0], lastVtx[1], lastVtx[2]];
+    }
+    return { segments, endpoints: { start: startPt, end: endPt } };
+  }
+
+  // ---- flat/3D visibility toggle --------------------------------------
+
+  function applyRouteVisibility() {
+    if (!_map) return;
+    const show2d = !state.in3d;
+    // Flat layers: show only when NOT in 3D
+    const setVis = (id, visible) => {
+      if (!_map.getLayer(id)) return;
+      _map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    };
+    setVis(ROUTE_CASING_LAYER, show2d);
+    setVis(ROUTE_LINE_LAYER, show2d);
+    setVis(ROUTE_ENDPOINTS_LAYER, show2d);
+    // 3D layer: opposite
+    if (window.MaristRoute3D && typeof window.MaristRoute3D.setVisible === 'function') {
+      window.MaristRoute3D.setVisible(!show2d);
+    }
+  }
+
+  function push3dRoute() {
+    if (!window.MaristRoute3D) return;
+    if (!state.route) {
+      window.MaristRoute3D.clear();
+      return;
+    }
+    const spec = buildAltitudePolylines(state.route);
+    if (!spec || !spec.segments.length) {
+      window.MaristRoute3D.clear();
+      return;
+    }
+    window.MaristRoute3D.setRoute(spec);
+  }
+
   function renderMap() {
     if (!_map) return;
     ensureLayers(_map);
@@ -196,6 +546,8 @@
       }
     }
     addConnectorMarkers();
+    push3dRoute();
+    applyRouteVisibility();
   }
 
   function fitRoute() {
@@ -421,6 +773,13 @@
       renderMap();
       fitRoute();
       emitChange({ status: 'ready' });
+    },
+    /** Called by map.js whenever the pitch crosses the 3D threshold. */
+    set3dMode(in3d) {
+      const next = !!in3d;
+      if (state.in3d === next) return;
+      state.in3d = next;
+      applyRouteVisibility();
     },
     get snapshot() {
       return {
