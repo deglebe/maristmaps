@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>GeoLog — maristmaps</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='tools/survey.css') }}">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+</head>
+<body>
+  <header>
+    <span class="title" id="hdr-title">GeoLog</span>
+    <span class="gps-status" id="gps-status">gps off</span>
+  </header>
+  <main>
+    <div id="app"></div>
+  </main>
+  {# Injected by main.tools_survey — used as CFG in survey.js. Same shape
+     as map_config on the main page so we stay consistent. #}
+  <script type="application/json" id="geolog-config">{{ map_config | tojson }}</script>
+  <script src="{{ url_for('static', filename='tools/survey.js') }}" defer></script>
+</body>
+</html>

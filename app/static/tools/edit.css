@@ -1,0 +1,228 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: #111; color: #ddd; font-size: 14px;
+    }
+    header {
+      padding: 10px 16px; border-bottom: 1px solid #222;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .title { font-weight: 600; color: #eee; margin-right: 4px; }
+    input[type=file], input[type=text], select, header button {
+      background: #1a1a1a; color: #ccc; border: 1px solid #2a2a2a;
+      border-radius: 6px; padding: 6px 10px;
+      font-family: inherit; font-size: 13px; outline: none; cursor: pointer;
+    }
+    input[type=text] { cursor: text; }
+    header button:hover { background: #222; }
+    header button.active { background: #252525; color: #eee; border-color: #444; }
+    #toggle-edit.active { background: #2a2a1a; color: #daa520; border-color: #554530; }
+    #toggle-route.active { background: #2a1f1a; color: #f39c12; border-color: #5c3c22; }
+    #toggle-hallway.active { background: #1a2a1a; color: #8fa; border-color: #3a5c3a; }
+    select:focus, input[type=file]:focus, input[type=text]:focus { border-color: #444; }
+    .pref-toggle {
+      display: flex; align-items: center; gap: 6px;
+      color: #888; font-size: 12px; cursor: pointer; user-select: none;
+    }
+    .pref-toggle input { margin: 0; cursor: pointer; }
+    #count { color: #666; font-size: 12px; }
+    .hint { color: #555; font-size: 12px; margin-left: auto; }
+    #map { height: calc(100vh - 50px); width: 100%; position: relative; }
+    .maplibregl-canvas { outline: none; }
+
+    /* Default cursor behavior — map.js uses crosshair during add/hallway modes
+       for clarity about where the click will land. */
+    body.add-mode .maplibregl-canvas-container,
+    body.hallway-mode .maplibregl-canvas-container { cursor: crosshair; }
+
+    /* DOM markers: SVG wrappers for the four kinds. */
+    .mm-marker {
+      width: 14px; height: 14px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .mm-marker--entrance,
+    .mm-marker--elevator { height: 16px; }
+    .mm-marker--hallway { width: 10px; height: 10px; }
+    .mm-marker--hallway-active { width: 14px; height: 14px; }
+    .mm-marker svg { display: block; pointer-events: none; }
+
+    /* Route start/end rings drawn as DOM markers so they sit above the line. */
+    .mm-ring {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 3px solid currentColor;
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+    .mm-ring--start { color: #5a5; }
+    .mm-ring--end { color: #e74c3c; }
+
+    /* Draft marker for add mode: dashed red circle. */
+    .mm-draft {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: rgba(231, 76, 60, 0.45);
+      border: 2px dashed #fff;
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+
+    #legend {
+      position: absolute; top: 50%; left: 12px;
+      transform: translateY(-50%);
+      background: rgba(17,17,17,0.92); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 8px 12px; font-size: 12px; z-index: 1000;
+    }
+    #legend.hidden { display: none; }
+    #legend .item {
+      display: flex; align-items: center; gap: 8px;
+      margin: 4px 0; min-height: 18px;
+    }
+    #legend .sym {
+      width: 16px; height: 16px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+
+    #info {
+      position: absolute; bottom: 12px; left: 12px;
+      background: rgba(17,17,17,0.95); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 12px 14px; font-size: 13px;
+      max-width: 320px; z-index: 1000; display: none; line-height: 1.5;
+    }
+    #info .k {
+      color: #555; text-transform: uppercase; font-size: 10px;
+      letter-spacing: 0.06em; margin-top: 6px;
+    }
+    #info .k:first-child { margin-top: 0; }
+    #info .v { color: #ccc; }
+
+    #panel {
+      position: absolute; top: 62px; right: 12px; width: 280px;
+      background: rgba(17,17,17,0.97); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px; font-size: 13px;
+      z-index: 1100; display: none;
+      max-height: calc(100vh - 80px); overflow-y: auto;
+    }
+    #panel.open { display: block; }
+    .panel-hd {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .panel-hd .t { font-weight: 600; color: #eee; }
+    .panel-hd button {
+      background: none; border: none; color: #666; font-size: 20px;
+      cursor: pointer; padding: 0 4px; line-height: 1;
+    }
+    .kind-row { display: flex; gap: 4px; margin-bottom: 12px; }
+    .kind-btn {
+      flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 500;
+      background: #1a1a1a; color: #666; border: 1px solid #2a2a2a;
+      border-radius: 6px; font-family: inherit; cursor: pointer;
+    }
+    .kind-btn.active { background: #252525; color: #ccc; border-color: #444; }
+    .field { margin-bottom: 10px; }
+    .field.hidden { display: none; }
+    .field label {
+      display: block; color: #666; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
+    }
+    .field input, .field select {
+      width: 100%; padding: 8px 10px; font-size: 13px;
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
+      color: #ccc; font-family: inherit; outline: none;
+    }
+    .field input:focus, .field select:focus { border-color: #444; }
+    .field-pair { display: flex; gap: 6px; }
+    .field-pair input { flex: 1; }
+    .field-hint { color: #555; font-size: 11px; margin-top: 4px; }
+    .btn-primary {
+      width: 100%; padding: 10px; font-size: 13px; font-weight: 600;
+      background: #eee; color: #111; border: none; border-radius: 6px;
+      font-family: inherit; cursor: pointer; margin-top: 4px;
+    }
+    .btn-primary:hover { background: #fff; }
+    .btn-danger {
+      width: 100%; padding: 8px; font-size: 12px;
+      background: transparent; color: #a55; border: 1px solid #3a2020;
+      border-radius: 6px; font-family: inherit; cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-danger:hover { background: #2a1a1a; color: #c66; }
+    .btn-danger.hidden { display: none; }
+
+    /* Route panel */
+    #route-panel {
+      position: absolute; top: 62px; right: 12px; width: 260px;
+      background: rgba(17,17,17,0.97); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px; font-size: 13px;
+      z-index: 1050; display: none;
+    }
+    #route-panel.open { display: block; }
+    #panel.open ~ #route-panel.open { right: 304px; }
+    .route-slot {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; margin-bottom: 8px;
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
+    }
+    .route-slot.start { border-left: 3px solid #5a5; }
+    .route-slot.end { border-left: 3px solid #e74c3c; }
+    .route-slot .lbl {
+      color: #666; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; min-width: 34px;
+    }
+    .route-slot .val { flex: 1; color: #ccc; font-size: 12px; }
+    .route-slot .val.empty { color: #555; font-style: italic; }
+    .route-slot button {
+      background: none; border: none; color: #555; font-size: 16px;
+      cursor: pointer; padding: 0 2px; line-height: 1;
+    }
+    .route-slot button:hover { color: #888; }
+    .route-slot button.hidden { display: none; }
+    .route-info {
+      margin-top: 8px; padding: 10px; font-size: 12px;
+      background: #1a1a1a; border-radius: 6px; color: #aaa;
+      line-height: 1.5; min-height: 40px;
+    }
+    .route-info .note {
+      color: #f39c12; font-size: 11px; margin-top: 4px;
+    }
+    .route-info.error { color: #c66; }
+    .route-info .empty { color: #555; font-style: italic; }
+
+    /* Hallway panel */
+    #hallway-panel {
+      position: absolute; top: 62px; left: 12px; width: 260px;
+      background: rgba(17,17,17,0.97); border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px; font-size: 13px;
+      z-index: 1050; display: none;
+    }
+    #hallway-panel.open { display: block; }
+    .hall-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+    .hall-row label {
+      color: #666; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; min-width: 60px;
+    }
+    .hall-row select, .hall-row .readout {
+      flex: 1; padding: 6px 8px; font-size: 12px;
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 5px;
+      color: #ccc; font-family: inherit; outline: none;
+    }
+    .hall-status {
+      padding: 8px 10px; background: #1a1a1a; border-radius: 5px;
+      margin: 8px 0; font-size: 12px; color: #aaa; line-height: 1.4;
+    }
+    .hall-status .active { color: #8fa; font-weight: 500; }
+    .hall-status .none { color: #666; font-style: italic; }
+    .hall-help { font-size: 11px; color: #666; line-height: 1.5; margin: 8px 0; }
+    .hall-help code {
+      background: #222; padding: 1px 5px; border-radius: 3px;
+      color: #ccc; font-size: 10px;
+    }
+    .hall-btn-row { display: flex; gap: 6px; margin-top: 8px; }
+    .hall-btn-row button {
+      flex: 1; padding: 7px; font-size: 11px;
+      background: #1a1a1a; color: #aaa; border: 1px solid #2a2a2a;
+      border-radius: 5px; font-family: inherit; cursor: pointer;
+    }
+    .hall-btn-row button:hover { background: #222; color: #ccc; }

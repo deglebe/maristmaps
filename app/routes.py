@@ -69,6 +69,31 @@ def map_only():
 
 
 # ---------------------------------------------------------------------------
+# Tools (internal — surveying + CSV editor)
+# ---------------------------------------------------------------------------
+#
+# Both pages read the same _map_page_config() blob as the main map so the
+# Martin URL, campus center, and zoom stay in sync across every
+# map-rendering surface. Tools are not linked from the public header;
+# they're reachable by direct URL only.
+
+
+@bp.route("/tools/survey")
+def tools_survey():
+    """Field surveying tool — mobile GPS logger that emits CSVs matching
+    the edit tool's expected schema."""
+    return render_template("tools/survey.html", map_config=_map_page_config())
+
+
+@bp.route("/tools/edit")
+def tools_edit():
+    """Desktop CSV editor — the old csv_viz.html tool, now rendered
+    against Martin OSM tiles and wired through Flask so the Martin URL
+    comes from the server config instead of localStorage."""
+    return render_template("tools/edit.html", map_config=_map_page_config())
+
+
+# ---------------------------------------------------------------------------
 # Features (unchanged)
 # ---------------------------------------------------------------------------
 
@@ -239,7 +264,7 @@ def api_features():
         )
 
     _apply_building_name_overrides(features)
-    
+
     features.sort(key=lambda f: (f["kind"], (f["name"] or "").lower()))
     return jsonify({"features": features, "count": len(features)})
 
