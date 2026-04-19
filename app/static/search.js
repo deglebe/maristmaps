@@ -1155,6 +1155,7 @@
     let cancelRecording = null;
 
     voiceBtn.addEventListener('click', () => {
+      if (voiceBtn.classList.contains('search-voice-btn--processing')) return;
       if (typeof cancelRecording === 'function') {
         cancelRecording();
         return;
@@ -1214,6 +1215,19 @@
         voiceBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
       }
 
+      function setUiProcessing(on) {
+        voiceBtn.classList.toggle('search-voice-btn--processing', on);
+        if (on) {
+          voiceBtn.setAttribute('aria-busy', 'true');
+          voiceBtn.setAttribute('aria-label', 'Working on your request…');
+          voiceBtn.setAttribute('title', 'Working on your request…');
+        } else {
+          voiceBtn.removeAttribute('aria-busy');
+          voiceBtn.setAttribute('aria-label', 'Voice search');
+          voiceBtn.setAttribute('title', 'Voice search');
+        }
+      }
+
       function finish(transcode) {
         cancelAnimationFrame(raf);
         cancelRecording = null;
@@ -1223,6 +1237,7 @@
           if (!transcode || !chunks.length) return;
           const blob = new Blob(chunks, { type: mime });
           if (blob.size < 120) return;
+          setUiProcessing(true);
           (async () => {
             try {
               const fd = new FormData();
@@ -1232,12 +1247,18 @@
               const js = await tr.json();
               const text = (js.text || '').trim();
               if (!text) return;
+              // Drop the transcript into the input visually but DON'T trigger
+              // the place-search dropdown — voice input is rarely a place
+              // name and "No matching places" is wrong UX while the agent
+              // is actually working on it.
               single.input.value = text;
-              single.sync();
+              single.closeDropdown();
               const agent = await invokeCampusAgent(text);
               handleAgentPipelineResult(agent);
             } catch (e) {
               console.warn('[search] voice agent pipeline failed', e);
+            } finally {
+              setUiProcessing(false);
             }
           })();
         };

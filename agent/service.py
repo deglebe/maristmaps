@@ -90,20 +90,71 @@ def _format_user_message(
 ) -> str:
     parts = [f"User request:\n{text.strip()}"]
     loc_lines = []
+    coords_ok = False
     if from_lon is not None and from_lat is not None:
         try:
-            loc_lines.append(f"- Map coordinates (lon, lat): {float(from_lon)}, {float(from_lat)}")
+            loc_lines.append(
+                f"- Map coordinates (lon, lat): {float(from_lon)}, {float(from_lat)}"
+            )
+            coords_ok = True
         except (TypeError, ValueError):
             pass
     if from_label:
         loc_lines.append(f"- Map label: {from_label}")
     if loc_lines:
-        parts.append("Current location context:\n" + "\n".join(loc_lines))
+        block = "Current location context:\n" + "\n".join(loc_lines)
+        if coords_ok:
+            block += (
+                "\n\nThese map coordinates are a complete starting point. "
+                "Pass them to navigate as current_lon and current_lat. "
+                "Do NOT ask the user where they are starting from."
+            )
+        parts.append(block)
     else:
         parts.append(
-            "Current location context: not provided — ask where they are if you need it for routing."
+            "Current location context: not provided — ask where they are if you "
+            "need it for routing."
         )
     return "\n\n".join(parts)
+
+
+def _had_navigate_tool_call(messages: list) -> bool:
+    for m in messages:
+        if isinstance(m, AIMessage):
+            for tc in (m.tool_calls or []):
+                if (tc.get("name") or "").lower() == "navigate":
+                    return True
+        if isinstance(m, ToolMessage) and (m.name or "").lower() == "navigate":
+            return True
+    return False
+
+
+def looks_like_question(text: str) -> bool:
+    """A reply that genuinely asks for clarification.
+
+    We accept either a literal '?' (the prompts demand one for any
+    clarification) or the assistant explicitly asking for a missing field.
+    """
+    if not text:
+        return False
+    s = text.strip()
+    if "?" in s:
+        return True
+    low = s.lower()
+    cues = (
+        "what building",
+        "which building",
+        "what room",
+        "which room",
+        "where are you",
+        "where do you",
+        "tell me",
+        "let me know",
+        "could you say",
+        "please say",
+        "please tell",
+    )
+    return any(c in low for c in cues)
 
 
 def _last_ai_text(messages: list) -> str:
@@ -265,22 +316,51 @@ def run_agent_turn(
     )
     log.debug("agent_turn_formatted_user_block=%r", trunc_preview(user_content, 2000))
 
-    result = graph.invoke({
-        "messages": prior + [HumanMessage(content=user_content)],
-    })
+    initial_messages = prior + [HumanMessage(content=user_content)]
+    result = graph.invoke({"messages": initial_messages})
     messages = result.get("messages") or []
     _log_langgraph_messages(messages)
 
     reply = _last_ai_text(messages)
-    if not reply:
-        reply = "Please say where you'd like to go and, if you can, where you're starting from."
-
     plan = take_navigation_plan()
+
+    # The model sometimes whiffs: it produces a conversational reply like
+    # "Sure, let me plan that for you" without ever calling `navigate`. That
+    # confuses the voice loop (no plan, but no real question to answer either).
+    # When that happens, nudge it once and retry.
+    if (
+        plan is None
+        and not _had_navigate_tool_call(messages)
+        and reply
+        and not looks_like_question(reply)
+    ):
+        log.warning(
+            "agent_turn_no_tool_no_question retrying with nudge reply_preview=%r",
+            trunc_preview(reply, 300),
+        )
+        nudge = SystemMessage(content=(
+            "You just replied without calling the `navigate` tool and without "
+            "asking the user a clarifying question. That is not allowed. "
+            "Either call `navigate` now with the destination and any starting "
+            "point you have (the user's map coordinates count as a starting "
+            "point), or reply with ONE specific clarifying question that ends "
+            "in '?'. Do not say 'planning your trip' or any similar filler."
+        ))
+        retry_messages = list(messages) + [nudge]
+        result = graph.invoke({"messages": retry_messages})
+        messages = result.get("messages") or messages
+        _log_langgraph_messages(messages)
+        reply = _last_ai_text(messages) or reply
+        plan = take_navigation_plan()
+
+    if not reply:
+        reply = (
+            "Please say where you'd like to go and, if you can, where you're "
+            "starting from."
+        )
     audio: bytes | None = None
-    if plan is None and reply:
+    if reply:
         audio = text_to_speech_mp3(reply)
-    elif plan is not None:
-        log.info("agent_turn_skip_tts reason=route_computed")
 
     stored = flatten_messages_for_replay(_without_system(messages))
     log.info(

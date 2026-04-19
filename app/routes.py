@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from agent.logutil import get_logger, trunc_preview
-from agent.service import run_agent_turn_b64, speech_to_text
+from agent.service import looks_like_question, run_agent_turn_b64, speech_to_text
 from app import routing, trip
 from app.extensions import db
 from app.locations import (
@@ -511,8 +511,10 @@ def api_agent():
     Send ``reset: true`` to start a new conversation.
 
     Response ``response_code`` / ``response_code_numeric``:
-      ``CLARIFICATION_PENDING`` / 1 — needs more info; ``reopen_mic`` is true.
+      ``CLARIFICATION_PENDING`` / 1 — assistant asked a question; ``reopen_mic`` is true.
       ``ROUTE_READY`` / 2 — a route was computed; ``reopen_mic`` is false.
+      ``NO_ACTION`` / 0 — assistant replied without a route or a question;
+      ``reopen_mic`` is false so the voice loop terminates.
     """
     if not os.environ.get("OPENAI_API_KEY"):
         abort(503, description="OPENAI_API_KEY is not configured")
@@ -572,14 +574,29 @@ def api_agent():
         session.pop(_AGENT_SESSION_KEY, None)
         session.modified = True
 
-    needs_clarification = plan is None
-    response_code = "CLARIFICATION_PENDING" if needs_clarification else "ROUTE_READY"
-    response_code_numeric = 1 if needs_clarification else 2
+    # A turn only "needs clarification" when the assistant actually asked a
+    # question. If the model produced a plan we're done; if it produced
+    # filler ("sure, planning that for you") with no plan and no question we
+    # do NOT reopen the mic — that would loop the user into nonsense voice
+    # rounds.
+    if plan is not None:
+        needs_clarification = False
+        response_code = "ROUTE_READY"
+    elif looks_like_question(reply):
+        needs_clarification = True
+        response_code = "CLARIFICATION_PENDING"
+    else:
+        needs_clarification = False
+        response_code = "NO_ACTION"
+    response_code_numeric = 0 if response_code == "NO_ACTION" else (
+        2 if response_code == "ROUTE_READY" else 1
+    )
 
     agent_http_log.info(
-        "POST /api/agent response response_code=%s navigated=%s reply_preview=%r audio_b64_len=%s",
+        "POST /api/agent response response_code=%s navigated=%s reopen_mic=%s reply_preview=%r audio_b64_len=%s",
         response_code,
         plan is not None,
+        needs_clarification,
         trunc_preview(reply, 600),
         len(audio_b64) if audio_b64 else 0,
     )
