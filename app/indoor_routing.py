@@ -533,6 +533,21 @@ def _arrival_side(turn: str) -> str:
     }[turn]
 
 
+def _turn_out_of_connector(turn: str, connector_word: str) -> str:
+    """Post-stair / post-elevator turn phrasing.
+
+    ``connector_word`` is ``"stairs"`` or ``"elevator"``. We lean on
+    "continue in the same direction" for straight so it reads naturally
+    — someone who just climbed stairs isn't thinking about bearings.
+    """
+    return {
+        "left": f"exit the {connector_word} and turn left",
+        "right": f"exit the {connector_word} and turn right",
+        "straight": f"exit the {connector_word} and continue straight",
+        "back": f"exit the {connector_word} and turn around",
+    }[turn]
+
+
 # --- step emitters -----------------------------------------------------------
 
 
@@ -590,9 +605,16 @@ def _step_change_floor(
     name = connector.room or (
         "the stairs" if connector.subtype == "stairs" else "the elevator"
     )
+    floors_up = abs(to_f - from_f)
+    flight_word = "flight" if floors_up == 1 else "flights"
+    # Elevators don't need "two flights" phrasing; stairs benefit from it.
+    if connector.subtype == "stairs" and floors_up >= 1:
+        suffix = f" {direction} {floors_up} {flight_word} to floor {to_f}"
+    else:
+        suffix = f" {direction} to floor {to_f}"
     return Step(
         kind="change_floor",
-        text=f"Take {name} {direction} to floor {to_f}.",
+        text=f"Take {name}{suffix}.",
         polyline=[connector.point],
         connector_name=connector.room,
         connector_kind=connector.subtype,
@@ -601,24 +623,79 @@ def _step_change_floor(
     )
 
 
-def _step_exit_connector(connector: LocationRow) -> Step:
-    # inline direction_from_connector verbatim if present; sentence-case + period
+def _step_exit_connector(
+    connector: LocationRow,
+    leg1: list[Point] | None = None,
+    leg2: list[Point] | None = None,
+) -> Step:
+    """Exit-stair / exit-elevator step, with automatic turn detection.
+
+    We prefer the CSV-authored ``direction_from_connector`` hint when it's
+    populated (surveyor on-the-ground knowledge beats geometry). Otherwise
+    we assume the stair/elevator doorway FACES the hallway it connects to,
+    compute a "facing" bearing from the stair point to where it meets the
+    hallway, and classify the turn from there into the first real walking
+    segment.
+
+    This matches how a user experiences exiting a stairwell: they step
+    out facing into the corridor, and the instruction "turn left / right /
+    continue straight" is relative to that forward-facing orientation —
+    not to whatever direction they happened to approach from one floor
+    below, which is often irrelevant (stairwells can rotate you 180°).
+
+    If the real-world stair doesn't face the hallway it snaps to, fill
+    in ``direction_from_connector`` on that row and the manual hint wins.
+    """
     custom = (connector.direction_from_connector or "").strip()
+    connector_word = "elevator" if connector.subtype == "elevator" else "stairs"
+
     if custom:
+        # Surveyor hint wins. Sentence-case + period for consistency.
         if custom[0].islower():
             custom = custom[0].upper() + custom[1:]
         if not custom.endswith("."):
             custom = custom + "."
-        text = f"Exit {connector.room or 'the stairwell'}. {custom}"
+        return Step(
+            kind="exit_connector",
+            text=f"Exit {connector.room or ('the ' + connector_word)}. {custom}",
+            polyline=[connector.point],
+            connector_name=connector.room,
+            connector_kind=connector.subtype,
+        )
+
+    # Geometric turn detection, referenced against the stair's own
+    # orientation. We assume a stair (or elevator) doorway FACES the
+    # hallway it connects to — so the direction from the stair point to
+    # where it meets the hallway (leg2[0] -> leg2[1]) is "forward" for
+    # someone just stepping out. Whatever bearing you need to walk from
+    # there (leg2[1] -> leg2[2]) is measured relative to that forward.
+    #
+    # This is better than using leg1's approach bearing: stairwells can
+    # rotate you 180° between floors, and what matters to the user on
+    # the way out is how the stair exit relates to the hallway in front
+    # of them on THIS floor, not how they happened to approach below.
+    #
+    # leg1 is unused for the turn classification, but we still accept
+    # it so call sites don't need to change.
+    turn: str | None = None
+    if leg2 and len(leg2) >= 3:
+        facing = bearing_deg(leg2[0], leg2[1])
+        depart = bearing_deg(leg2[1], leg2[2])
+        turn = turn_classify(facing, depart)
+    del leg1  # silence unused-arg warnings; kept in signature for clarity
+
+    if turn is not None:
+        text = _turn_out_of_connector(turn, connector_word).capitalize() + "."
     else:
-        kind = "stairwell" if connector.subtype == "stairs" else "elevator"
-        text = f"Exit the {kind}."
+        text = f"Exit the {connector_word}."
+
     return Step(
         kind="exit_connector",
         text=text,
         polyline=[connector.point],
         connector_name=connector.room,
         connector_kind=connector.subtype,
+        turn=turn,
     )
 
 
@@ -789,7 +866,9 @@ def _route_indoor(
     ))
 
     steps.append(_step_change_floor(connector, sf, ef))
-    steps.append(_step_exit_connector(connector))
+    # NEW: pass leg1 + leg2 so exit_connector can compute a turn when
+    # the CSV row doesn't have a manual direction_from_connector hint.
+    steps.append(_step_exit_connector(connector, leg1=leg1, leg2=leg2))
 
     if end_mode == "entrance_exit":
         steps.append(_step_walk(
