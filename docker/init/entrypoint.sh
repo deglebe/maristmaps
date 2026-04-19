@@ -77,13 +77,15 @@ run_osm2pgsql() {
 
     nprocs=$(nproc 2>/dev/null || echo 2)
     log "importing $PBF_FILE via osm2pgsql (cache=${OSM2PGSQL_CACHE}MB, procs=$nprocs) ..."
+    # osm2pgsql 2.0 removed --host / --port / --username / --database;
+    # connection info is taken from the libpq PG* env vars we exported
+    # above (or from -d "postgres://..." if you prefer a URI).
     # shellcheck disable=SC2086
     osm2pgsql \
         --create --slim --drop --hstore --multi-geometry \
         --number-processes "$nprocs" \
         --cache "$OSM2PGSQL_CACHE" \
-        --host "$PGHOST" --port "$PGPORT" \
-        --username "$PGUSER" --database "$PGDATABASE" \
+        -d "$PGDATABASE" \
         $OSM2PGSQL_EXTRA \
         "$PBF_FILE"
     log "osm2pgsql import complete"

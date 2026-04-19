@@ -123,12 +123,16 @@ OSM2PGSQL_COMMON="--create --slim --drop --hstore --multi-geometry \
     --number-processes $NPROCS --cache $OSM2PGSQL_CACHE"
 
 run_osm2pgsql() {
+    # osm2pgsql 2.0 dropped --host/--port/--username/--database. We
+    # export the libpq PG* env vars at the top of this script, so both
+    # the pre-2.0 and 2.x clients pick up the connection info from
+    # there. `-d "$PGDATABASE"` is kept because it's still supported
+    # and makes the target DB visible at a glance in `ps`.
     if command -v osm2pgsql >/dev/null 2>&1; then
         log "using host osm2pgsql: $(command -v osm2pgsql)"
         # shellcheck disable=SC2086
         osm2pgsql $OSM2PGSQL_COMMON \
-            --host "$PGHOST" --port "$PGPORT" \
-            --username "$PGUSER" --database "$PGDATABASE" \
+            -d "$PGDATABASE" \
             $OSM2PGSQL_EXTRA \
             "$PBF_FILE"
         return $?
@@ -168,12 +172,15 @@ run_osm2pgsql() {
     # shellcheck disable=SC2086
     docker run --rm \
         $_net_args \
+        -e PGHOST="$_target_host" \
+        -e PGPORT="$_target_port" \
+        -e PGUSER="$PGUSER" \
         -e PGPASSWORD="$PGPASSWORD" \
+        -e PGDATABASE="$PGDATABASE" \
         -v "$_pbf_dir:/pbf:ro" \
         "$OSM2PGSQL_IMAGE" \
         osm2pgsql $OSM2PGSQL_COMMON \
-            --host "$_target_host" --port "$_target_port" \
-            --username "$PGUSER" --database "$PGDATABASE" \
+            -d "$PGDATABASE" \
             $OSM2PGSQL_EXTRA \
             "/pbf/$_pbf_name"
 }
