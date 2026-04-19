@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import re
 from io import BytesIO
 
 from flask import Flask
@@ -97,6 +98,58 @@ def init_agent(app: Flask) -> None:
         reset_navigation_result()
 
 
+# ---------------------------------------------------------------------------
+# Named-start detection
+# ---------------------------------------------------------------------------
+#
+# When the user says "route me from X to Y", the model is supposed to parse
+# "from X" as the starting point and pass it as current_building. In practice
+# it sometimes grabbed the map coordinates in the context block instead —
+# both signals are present simultaneously, and concrete coordinates tend to
+# win over prose instructions asking the model to ignore them.
+#
+# Fix: if the user's message contains a named-start cue, we suppress the
+# coordinate fallback entirely when formatting the prompt. The model can't
+# accidentally use coordinates it never sees.
+
+# Patterns that indicate the user explicitly named a starting point.
+# Order matters: more specific patterns first so "from the" doesn't
+# match before "from <building>".
+_NAMED_START_PATTERNS = [
+    # "from Hancock", "from Hancock 2020", "from Donnelly room 101"
+    re.compile(r"\bfrom\s+(?:the\s+)?[a-z][\w'\-]*", re.IGNORECASE),
+    # "I'm in Hancock", "I am in Donnelly 2020"
+    re.compile(r"\bi['\u2019]?m\s+(?:in|at|inside)\s+", re.IGNORECASE),
+    re.compile(r"\bi\s+am\s+(?:in|at|inside)\s+", re.IGNORECASE),
+    # "starting from X", "start at X", "starting at X"
+    re.compile(r"\bstart(?:ing)?\s+(?:from|at|in)\s+", re.IGNORECASE),
+    # "currently in X", "currently at X"
+    re.compile(r"\bcurrently\s+(?:in|at|inside)\s+", re.IGNORECASE),
+]
+
+# Words that look like "from" but aren't a starting-point cue, so we
+# don't trigger on them. ("away from", "far from", "different from" etc.)
+_FROM_FALSE_POSITIVE_PREFIXES = re.compile(
+    r"\b(?:away|apart|far|different|aside|safe|protect\w*|hide|hidden)\s+from\b",
+    re.IGNORECASE,
+)
+
+
+def user_named_a_start(text: str) -> bool:
+    """True when the user's request explicitly names a starting location.
+
+    Used to suppress the map-coordinate fallback so the model can't
+    quietly route from live GPS when the user asked for a specific
+    start (e.g. "from Hancock 2020 to the library").
+    """
+    if not text:
+        return False
+    # Strip false-positive "from" phrases first so "stay away from
+    # campus to the library" doesn't read as a named start.
+    stripped = _FROM_FALSE_POSITIVE_PREFIXES.sub("", text)
+    return any(p.search(stripped) for p in _NAMED_START_PATTERNS)
+
+
 def _format_user_message(
     text: str,
     *,
@@ -105,9 +158,16 @@ def _format_user_message(
     from_label: str | None,
 ) -> str:
     parts = [f"User request:\n{text.strip()}"]
+
+    # If the user explicitly said "from X" / "I'm in X" / etc., suppress
+    # the coordinate fallback entirely. The model was occasionally
+    # routing from live GPS despite a named start — this makes that
+    # impossible by removing the coordinates from context.
+    suppress_coords = user_named_a_start(text)
+
     loc_lines = []
     coords_ok = False
-    if from_lon is not None and from_lat is not None:
+    if not suppress_coords and from_lon is not None and from_lat is not None:
         try:
             loc_lines.append(
                 f"- Map coordinates (lon, lat): {float(from_lon)}, {float(from_lat)}"
@@ -115,8 +175,9 @@ def _format_user_message(
             coords_ok = True
         except (TypeError, ValueError):
             pass
-    if from_label:
+    if from_label and not suppress_coords:
         loc_lines.append(f"- Map label: {from_label}")
+
     if loc_lines:
         block = "Current location context:\n" + "\n".join(loc_lines)
         if coords_ok:
@@ -131,6 +192,16 @@ def _format_user_message(
                 "NOT ask the user where they are starting from."
             )
         parts.append(block)
+    elif suppress_coords:
+        # Tell the model explicitly that we omitted coordinates because
+        # they named a start themselves. Prevents it from asking "where
+        # are you?" when the answer is already in their message.
+        parts.append(
+            "Current location context: the user named a starting point in "
+            "their request; parse it from their words and pass it as "
+            "current_building (and current_room if given). Do NOT ask them "
+            "where they are starting from."
+        )
     else:
         parts.append(
             "Current location context: not provided — ask where they are if you "
@@ -331,13 +402,14 @@ def run_agent_turn(
     prior = flatten_messages_for_replay(_without_system(list(history or [])))
     log.info(
         "agent_turn_start raw_user_message=%r prior_flat_messages=%s from_lon=%s from_lat=%s "
-        "from_label=%r bitch_mode=%s",
+        "from_label=%r bitch_mode=%s named_start=%s",
         trunc_preview(message, 1200),
         len(prior),
         from_lon,
         from_lat,
         from_label,
         _bitch_mode_enabled(),
+        user_named_a_start(message),
     )
     log.debug("agent_turn_formatted_user_block=%r", trunc_preview(user_content, 2000))
 
