@@ -19,6 +19,18 @@
     return;
   }
   const cfg = JSON.parse(cfgEl.textContent);
+  /**
+   * tiles
+   *
+   * Purpose:
+   * Build the Martin XYZ tile URL template for a given PostGIS table name.
+   *
+   * Args:
+   * table - Backend table slug exposed by Martin (e.g. planet_osm_polygon).
+   *
+   * Returns:
+   * Tile URL pattern string with {z}/{x}/{y} placeholders.
+   */
   const tiles = (table) => `${cfg.martinBase}/${table}/{z}/{x}/{y}`;
 
   /* map focused on footpaths */
@@ -459,6 +471,18 @@
   // because top-down 3D boxes just look like chunky outlines.
   const PITCH_3D_THRESHOLD = 15;
   let in3d = false;
+  /**
+   * update3dLayers
+   *
+   * Purpose:
+   * Switch between flat building fill/outline and 3D extrusion based on pitch.
+   *
+   * Args:
+   * None (reads map pitch via closure).
+   *
+   * Returns:
+   * Nothing.
+   */
   const update3dLayers = () => {
     const shouldBe3d = map.getPitch() > PITCH_3D_THRESHOLD;
     if (shouldBe3d === in3d) return;
@@ -475,7 +499,31 @@
 
   // A simple custom control that flips between flat and tilted views. Drops
   // in next to the navigation control so it reads as part of the toolset.
+  /**
+   * PitchToggle
+   *
+   * Purpose:
+   * MapLibre IControl that toggles camera pitch between ~0° and ~55° for 3D.
+   *
+   * Args:
+   * None (class constructor invoked with `new`).
+   *
+   * Returns:
+   * Control instance (MapLibre calls onAdd/onRemove).
+   */
   class PitchToggle {
+    /**
+     * onAdd
+     *
+     * Purpose:
+     * Mount the "3D" button next to stock navigation controls.
+     *
+     * Args:
+     * m - maplibregl.Map instance.
+     *
+     * Returns:
+     * HTMLElement container for the control.
+     */
     onAdd(m) {
       this._map = m;
       this._container = document.createElement("div");
@@ -498,6 +546,18 @@
       this._btn = btn;
       return this._container;
     }
+    /**
+     * onRemove
+     *
+     * Purpose:
+     * Remove the control DOM when MapLibre disposes the control.
+     *
+     * Args:
+     * None.
+     *
+     * Returns:
+     * Nothing.
+     */
     onRemove() {
       this._container.remove();
       this._map = undefined;
@@ -508,6 +568,18 @@
   const toggleBtn = pitchToggle._btn;
 
   const CLICKABLE_LAYERS = ["buildings", "paths", "paths-stairs"];
+  /**
+   * escapeHtml
+   *
+   * Purpose:
+   * Escape HTML special characters for safe insertion into popup markup.
+   *
+   * Args:
+   * s - Value coerced to string.
+   *
+   * Returns:
+   * Escaped string.
+   */
   const escapeHtml = (s) =>
     String(s).replace(
       /[&<>"']/g,
@@ -521,26 +593,62 @@
         })[c],
     );
 
-  // Columns osm2pgsql's default style writes as real columns (as opposed to
-  // the hstore `tags` bucket). We render them in a fixed-ish order so the
-  // most useful attributes are at the top of the popup.
-  const BUILDING_TAG_ORDER = [
-    "building",
-    "name",
-    "addr:housename",
-    "addr:housenumber",
-    "addr:street",
-    "amenity",
-    "operator",
-    "ref",
-    "building:levels",
-    "height",
-    "access",
-    "wheelchair",
-    "opening_hours",
-    "phone",
-    "website",
-  ];
+  /**
+   * parseHstore
+   *
+   * Purpose:
+   * Parse PostgreSQL hstore text from osm2pgsql into a plain key/value object.
+   *
+   * Args:
+   * raw - Hstore string, plain object passthrough, or null/empty.
+   *
+   * Returns:
+   * Object mapping tag keys to string values (empty object on failure).
+   */
+  const parseHstore = (raw) => {
+    const out = {};
+    if (raw == null || raw === "") return out;
+    if (typeof raw === "object" && !Array.isArray(raw)) return { ...raw };
+    if (typeof raw !== "string") return out;
+    const s = raw.trim();
+    if (!s || s === "{}") return out;
+    const unesc = (t) => t.replace(/\\(.)/g, "$1");
+    const re =
+      /"((?:[^"\\]|\\.)*)"\s*=>\s*(?:"((?:[^"\\]|\\.)*)"|NULL)/g;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const key = unesc(m[1]);
+      if (m[2] !== undefined) out[key] = unesc(m[2]);
+    }
+    return out;
+  };
+
+  /**
+   * mergeTagsIntoProps
+   *
+   * Purpose:
+   * Merge hstore `tags` with MVT feature properties; columns override tags.
+   *
+   * Args:
+   * p - Raw GeoJSON properties from a vector tile feature.
+   *
+   * Returns:
+   * Combined property object for popup rendering.
+   */
+  const mergeTagsIntoProps = (p) => {
+    const fromTags = parseHstore(p.tags);
+    const merged = { ...fromTags };
+    for (const key of Object.keys(p)) {
+      if (key === "tags") continue;
+      const v = p[key];
+      if (v !== undefined && v !== null && String(v).trim() !== "") {
+        merged[key] = v;
+      }
+    }
+    return merged;
+  };
+
+  // Only show curated columns — not the raw hstore `tags` blob or internal ids.
   const GENERIC_TAG_ORDER = [
     "name",
     "amenity",
@@ -563,42 +671,339 @@
     "barrier",
     "ref",
   ];
-  // Ignore noise from osm2pgsql / postgis that isn't useful in a popup.
-  const HIDDEN_KEYS = new Set(["osm_id", "way_area", "z_order"]);
+  const HIDDEN_KEYS = new Set(["osm_id", "way_area", "z_order", "tags"]);
 
-  const attributeRows = (props, preferredOrder) => {
-    const seen = new Set();
+  const KEY_LABELS = {
+    name: "Name",
+    amenity: "Amenity",
+    shop: "Shop",
+    tourism: "Tourism",
+    leisure: "Leisure",
+    office: "Office",
+    healthcare: "Healthcare",
+    highway: "Kind",
+    surface: "Surface",
+    bicycle: "Bicycle",
+    foot: "Pedestrian",
+    wheelchair: "Wheelchair",
+    oneway: "One-way",
+    access: "Access",
+    landuse: "Land use",
+    natural: "Natural",
+    waterway: "Waterway",
+    man_made: "Structure",
+    barrier: "Barrier",
+    ref: "Reference",
+  };
+
+  /**
+   * humanizeUnderscore
+   *
+   * Purpose:
+   * Turn OSM underscore tokens into Title Case words for display.
+   *
+   * Args:
+   * s - Raw tag value string.
+   *
+   * Returns:
+   * Human-readable string.
+   */
+  const humanizeUnderscore = (s) =>
+    String(s)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (ch) => ch.toUpperCase());
+
+  /**
+   * labelForKey
+   *
+   * Purpose:
+   * Choose a table header label for an OSM property key.
+   *
+   * Args:
+   * k - Property key (e.g. addr:street, amenity).
+   *
+   * Returns:
+   * Display label string.
+   */
+  const labelForKey = (k) => {
+    if (KEY_LABELS[k]) return KEY_LABELS[k];
+    return k.includes(":")
+      ? k.replace(/:/g, " · ")
+      : humanizeUnderscore(k);
+  };
+
+  /**
+   * formatAddressBlock
+   *
+   * Purpose:
+   * Build a multi-line postal address string from addr:* tags.
+   *
+   * Args:
+   * p - Merged properties including addr:* keys.
+   *
+   * Returns:
+   * Newline-separated address, or empty string if nothing usable.
+   */
+  const formatAddressBlock = (p) => {
+    const lines = [];
+    if (p["addr:housename"]) lines.push(String(p["addr:housename"]).trim());
+    const num = p["addr:housenumber"];
+    const street = p["addr:street"] || p["addr:place"];
+    let streetLine = [num, street].filter(Boolean).join(" ").trim();
+    if (!streetLine && num) streetLine = String(num).trim();
+    if (streetLine) lines.push(streetLine);
+    const cityLine = [
+      [p["addr:city"], p["addr:state"]].filter(Boolean).join(", "),
+      p["addr:postcode"],
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (cityLine) lines.push(cityLine);
+    if (p["addr:country"]) lines.push(String(p["addr:country"]).trim());
+    return lines.join("\n");
+  };
+
+  /**
+   * isBareUnknownBuilding
+   *
+   * Purpose:
+   * Detect generic `building=yes` footprints with no useful title or detail tags.
+   *
+   * Args:
+   * p - Merged building properties.
+   *
+   * Returns:
+   * True if the popup should show only the title with no detail table.
+   */
+  const isBareUnknownBuilding = (p) => {
+    if (formatAddressBlock(p)) return false;
+    if (p.name && String(p.name).trim()) return false;
+    if (p["addr:housename"] && String(p["addr:housename"]).trim()) return false;
+    if (p.amenity) return false;
+    if (p.shop) return false;
+    if (p.brand) return false;
+    if (p.operator) return false;
+    if (p.building && p.building !== "yes") return false;
+    if (p.phone || p["contact:phone"]) return false;
+    if (p.website || p["contact:website"]) return false;
+    if (p.opening_hours) return false;
+    if (p.wheelchair || p["toilets:wheelchair"] || p["entrance:wheelchair"])
+      return false;
+    if (p.access) return false;
+    if (p.internet_access) return false;
+    if (p.ref) return false;
+    const b = p.building != null ? String(p.building) : "yes";
+    return b === "yes";
+  };
+
+  /**
+   * buildingPopupTitle
+   *
+   * Purpose:
+   * Pick the bold popup title for a building from name, address, or amenity tags.
+   *
+   * Args:
+   * p - Merged building properties (after overrides).
+   *
+   * Returns:
+   * Short title string.
+   */
+  const buildingPopupTitle = (p) => {
+    if (isBareUnknownBuilding(p)) return "Building";
+    if (p.name && String(p.name).trim()) return String(p.name).trim();
+    if (p["addr:housename"] && String(p["addr:housename"]).trim())
+      return String(p["addr:housename"]).trim();
+    if (p.brand && String(p.brand).trim()) return String(p.brand).trim();
+    if (p.amenity) return humanizeUnderscore(p.amenity);
+    if (p.shop) return humanizeUnderscore(p.shop);
+    if (p.building && p.building !== "yes") return humanizeUnderscore(p.building);
+    return "Building";
+  };
+
+  /**
+   * websiteHref
+   *
+   * Purpose:
+   * Normalize a website/tag value into an absolute http(s) URL for href=.
+   *
+   * Args:
+   * v - Raw URL or hostname string.
+   *
+   * Returns:
+   * URL string, or empty string if input is empty after trim.
+   */
+  const websiteHref = (v) => {
+    const t = String(v).trim();
+    if (!t) return "";
+    return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+  };
+
+  /**
+   * buildingTableRows
+   *
+   * Purpose:
+   * Build HTML <tr> rows for building popup detail table (non-bare buildings).
+   *
+   * Args:
+   * p - Merged building properties.
+   *
+   * Returns:
+   * Concatenated table row HTML, or empty string for bare unknown buildings.
+   */
+  const buildingTableRows = (p) => {
+    if (isBareUnknownBuilding(p)) return "";
+
     const rows = [];
-    const push = (k) => {
-      if (seen.has(k) || HIDDEN_KEYS.has(k)) return;
-      const v = props[k];
-      if (v === undefined || v === null || v === "") return;
-      seen.add(k);
-      rows.push(`<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`);
+    /**
+     * pushRow
+     *
+     * Purpose:
+     * Append one attribute row to the in-progress table HTML.
+     *
+     * Args:
+     * label - Table header text.
+     * value - Cell value (skipped if blank).
+     * multiline - If true, use popup-addr white-space styling.
+     *
+     * Returns:
+     * Nothing.
+     */
+    const pushRow = (label, value, multiline = false) => {
+      if (value === undefined || value === null || String(value).trim() === "")
+        return;
+      const cls = multiline ? ' class="popup-addr"' : "";
+      rows.push(
+        `<tr><th>${escapeHtml(label)}</th><td${cls}>${escapeHtml(String(value))}</td></tr>`,
+      );
     };
-    preferredOrder.forEach(push);
-    // Then spill everything else we haven't shown yet.
-    Object.keys(props).sort().forEach(push);
+
+    const addr = formatAddressBlock(p);
+    if (addr) {
+      rows.push(
+        `<tr><th>Address</th><td class="popup-addr">${escapeHtml(addr)}</td></tr>`,
+      );
+    }
+
+    if (p.building && String(p.building).trim() && p.building !== "yes") {
+      pushRow("Building type", humanizeUnderscore(p.building));
+    }
+    if (p.amenity) pushRow("Amenity", humanizeUnderscore(p.amenity));
+    if (p.shop) pushRow("Shop", humanizeUnderscore(p.shop));
+    if (p.brand) pushRow("Brand", String(p.brand));
+    pushRow("Operator", p.operator);
+    pushRow("Floors", p["building:levels"]);
+    pushRow("Hours", p.opening_hours);
+
+    const phone = p.phone || p["contact:phone"];
+    pushRow("Phone", phone);
+
+    const webRaw = p.website || p["contact:website"];
+    if (webRaw) {
+      const w = String(webRaw).trim();
+      if (w) {
+        const href = websiteHref(w);
+        rows.push(
+          `<tr><th>Website</th><td><a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(w)}</a></td></tr>`,
+        );
+      }
+    }
+
+    const accLines = [];
+    if (p.wheelchair)
+      accLines.push(`Building / paths: ${humanizeUnderscore(p.wheelchair)}`);
+    if (p["toilets:wheelchair"])
+      accLines.push(`Restrooms: ${humanizeUnderscore(p["toilets:wheelchair"])}`);
+    if (p["entrance:wheelchair"])
+      accLines.push(`Entrance: ${humanizeUnderscore(p["entrance:wheelchair"])}`);
+    if (accLines.length) pushRow("Accessibility", accLines.join("\n"), true);
+
+    if (p.access) pushRow("General access", humanizeUnderscore(p.access));
+    if (p.internet_access)
+      pushRow("Internet", humanizeUnderscore(p.internet_access));
+
+    pushRow("Reference", p.ref);
+
     return rows.join("");
   };
 
+  /**
+   * genericAttributeRows
+   *
+   * Purpose:
+   * Build attribute table rows for non-building features in fixed key order.
+   *
+   * Args:
+   * props - Merged feature properties.
+   * preferredOrder - Key order (GENERIC_TAG_ORDER).
+   *
+   * Returns:
+   * Concatenated <tr> HTML for non-empty keys in order.
+   */
+  const genericAttributeRows = (props, preferredOrder) => {
+    const rows = [];
+    for (const k of preferredOrder) {
+      if (HIDDEN_KEYS.has(k)) continue;
+      const v = props[k];
+      if (v === undefined || v === null || String(v).trim() === "") continue;
+      const label = labelForKey(k);
+      let display = String(v);
+      if (k === "highway" || k === "amenity") display = humanizeUnderscore(display);
+      rows.push(
+        `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(display)}</td></tr>`,
+      );
+    }
+    return rows.join("");
+  };
+
+  /**
+   * popupHtml
+   *
+   * Purpose:
+   * Build full popup HTML for a clicked vector feature (building vs other layers).
+   *
+   * Args:
+   * feature - MapLibre feature with properties and layer.
+   *
+   * Returns:
+   * HTML string passed to Popup#setHTML.
+   */
   const popupHtml = (feature) => {
-    const p = feature.properties || {};
+    const raw = feature.properties || {};
     const isBuilding = feature.layer && feature.layer.id === "buildings";
-    const preferred = isBuilding ? BUILDING_TAG_ORDER : GENERIC_TAG_ORDER;
+    const overrides = cfg.buildingNameOverrides || {};
+    let p = mergeTagsIntoProps(raw);
+    if (isBuilding && raw.osm_id != null) {
+      const custom = overrides[String(raw.osm_id)];
+      if (custom && String(custom).trim()) {
+        p = { ...p, name: String(custom).trim() };
+      }
+    }
+
+    if (isBuilding) {
+      const title = buildingPopupTitle(p);
+      const inner = buildingTableRows(p);
+      const body = inner
+        ? `<table class="attrs">${inner}</table>`
+        : '<div class="tag">No extra details</div>';
+      return `<strong>${escapeHtml(title)}</strong>${body}`;
+    }
+
     const title =
       p.name ||
       p["addr:housename"] ||
       p["addr:housenumber"] ||
+      p.brand ||
       p.building ||
       p.amenity ||
       p.shop ||
       p.highway ||
       "Feature";
-    const rows = attributeRows(p, preferred);
+
+    const rows = genericAttributeRows(p, GENERIC_TAG_ORDER);
     const body = rows
       ? `<table class="attrs">${rows}</table>`
-      : '<div class="tag">no tagged attributes</div>';
+      : '<div class="tag">No tagged attributes</div>';
     return `<strong>${escapeHtml(title)}</strong>${body}`;
   };
 
@@ -607,13 +1012,18 @@
       layers: CLICKABLE_LAYERS,
     });
     if (!features.length) return;
+    const clicked = features[0];
+    const oid = clicked.properties && clicked.properties.osm_id;
+    if (oid != null) {
+      console.log("[map] osm_id:", oid, "| layer:", clicked.layer && clicked.layer.id);
+    }
     new maplibregl.Popup({
       closeButton: true,
       closeOnClick: true,
       maxWidth: "22rem",
     })
       .setLngLat(e.lngLat)
-      .setHTML(popupHtml(features[0]))
+      .setHTML(popupHtml(clicked))
       .addTo(map);
   });
 
@@ -649,9 +1059,7 @@
   });
 
   // One-shot diagnostic: after the first render, report how many building
-  // features MapLibre actually has in view. If this is 0 after you land on
-  // campus, the problem is upstream (martin returned empty tiles or the
-  // polygon source isn't in its catalog) rather than a style issue.
+  // features MapLibre actually has in view.
   map.once("idle", () => {
     const n = map.queryRenderedFeatures({ layers: ["buildings"] }).length;
     console.log(`[map] buildings in viewport after first render: ${n}`);

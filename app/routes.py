@@ -1,4 +1,6 @@
+import json
 import os
+from pathlib import Path
 import re
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request
@@ -18,6 +20,30 @@ from app.locations import (
 
 bp = Blueprint("main", __name__)
 
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+_BUILDING_OVERRIDES_PATH = _DATA_DIR / "building_name_overrides.json"
+
+
+def _load_building_name_overrides():
+    """OSM way id → display name for buildings missing or weak names in OSM."""
+    if not _BUILDING_OVERRIDES_PATH.is_file():
+        return {}
+    try:
+        raw = json.loads(_BUILDING_OVERRIDES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k, v in raw.items():
+        ks = str(k).strip()
+        if ks.startswith("__"):
+            continue
+        if v is None or str(v).strip() == "":
+            continue
+        out[ks] = str(v).strip()
+    return out
+
 
 def _map_page_config():
     base = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:3000").rstrip("/")
@@ -28,6 +54,7 @@ def _map_page_config():
             float(os.environ.get("MAP_CENTER_LAT", "41.72233476143977")),
         ],
         "zoom": float(os.environ.get("MAP_ZOOM", "16.5")),
+        "buildingNameOverrides": _load_building_name_overrides(),
     }
 
 
@@ -79,6 +106,20 @@ _PATHS_SQL = text(
 )
 _PATH_KINDS_PARAM = list(routing.PATH_KINDS + routing.STAIR_KINDS)
 
+_BUILDING_POLYGON_BY_OSM_SQL = text(
+    """
+    SELECT osm_id,
+           name,
+           building,
+           amenity,
+           ST_X(ST_Transform(ST_Centroid(way), 4326)) AS lon,
+           ST_Y(ST_Transform(ST_Centroid(way), 4326)) AS lat
+    FROM planet_osm_polygon
+    WHERE osm_id = :osm_id AND building IS NOT NULL
+    LIMIT 1
+    """
+)
+
 
 def _safe_rows(sql, params=None):
     try:
@@ -86,6 +127,48 @@ def _safe_rows(sql, params=None):
     except SQLAlchemyError:
         db.session.rollback()
         return []
+
+
+def _safe_one(sql, params):
+    try:
+        row = db.session.execute(sql, params).mappings().first()
+        return dict(row) if row else None
+    except SQLAlchemyError:
+        db.session.rollback()
+        return None
+
+
+def _apply_building_name_overrides(features):
+    """Apply data/building_name_overrides.json; add search rows for unnamed polygons."""
+    overrides = _load_building_name_overrides()
+    if not overrides:
+        return
+    by_osm = {f["osm_id"]: f for f in features if f.get("kind") == "building"}
+    for oid_str, label in overrides.items():
+        try:
+            oid = int(oid_str)
+        except (TypeError, ValueError):
+            continue
+        if oid in by_osm:
+            by_osm[oid]["name"] = label
+            continue
+        row = _safe_one(_BUILDING_POLYGON_BY_OSM_SQL, {"osm_id": oid})
+        if not row:
+            continue
+        lon, lat = row["lon"], row["lat"]
+        if lon is None or lat is None:
+            continue
+        features.append(
+            {
+                "id": f"way/{oid}",
+                "osm_id": oid,
+                "kind": "building",
+                "name": label,
+                "subtitle": _building_subtitle(row),
+                "lon": float(lon),
+                "lat": float(lat),
+            }
+        )
 
 
 def _building_subtitle(row):
@@ -143,19 +226,22 @@ def api_features():
         if lon is None or lat is None:
             continue
         seen_path_names.add(name)
-        features.append({
-            "id": f"way/{row['osm_id']}", "osm_id": row["osm_id"],
-            "kind": "path", "name": name,
-            "subtitle": _path_subtitle(row),
-            "lon": float(lon), "lat": float(lat),
-        })
+        features.append(
+            {
+                "id": f"way/{row['osm_id']}",
+                "osm_id": row["osm_id"],
+                "kind": "path",
+                "name": name,
+                "subtitle": _path_subtitle(row),
+                "lon": float(lon),
+                "lat": float(lat),
+            }
+        )
+
+    _apply_building_name_overrides(features)
+    
     features.sort(key=lambda f: (f["kind"], (f["name"] or "").lower()))
     return jsonify({"features": features, "count": len(features)})
-
-
-# ---------------------------------------------------------------------------
-# Indoor index (powers the client-side autocomplete)
-# ---------------------------------------------------------------------------
 
 
 @bp.route("/api/indoor/index")

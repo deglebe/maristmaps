@@ -22,14 +22,90 @@
     return;
   }
 
-  // ---- shared data -----------------------------------------------------
+  const PLACEHOLDER_PHRASES = [
+    "Find Red Foxes…",
+    "Traverse Marist…",
+    "Search places…",
+    "Where in Hancock am I?",
+    "Lower Town vs Upper Town…",
+    "Plot your next sprint to class…",
+    "The Hudson has opinions…",
+    "Lost? Join the club.",
+    "Fox dens, cafés, and naps…",
+    "Avoid the stairs (good luck)…",
+    "Rotunda traffic report…",
+    "River views, river moods…",
+  ];
 
-  let FEATURES = [];
-  let featuresReady = false;
-  let featuresError = null;
-  const featuresReadyPromise = loadFeatures();
+  /**
+   * escapeHtml
+   *
+   * Purpose:
+   * Escape HTML special characters so untrusted text is safe in innerHTML.
+   *
+   * Args:
+   * s - Value (coerced to string) to escape.
+   *
+   * Returns:
+   * Escaped string safe to embed in HTML text nodes.
+   */
+  function escapeHtml(s) {
+    return String(s).replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
+  }
 
-  async function loadFeatures() {
+  /**
+   * highlight
+   *
+   * Purpose:
+   * Wrap the substring that matches the query in <strong> for the results list.
+   *
+   * Args:
+   * text - Original label text.
+   * q - Current search substring (case-insensitive match).
+   *
+   * Returns:
+   * HTML string (already entity-escaped except for inserted <strong> tags).
+   */
+  function highlight(text, q) {
+    if (!q) return escapeHtml(text);
+    const lower = text.toLowerCase();
+    const idx = lower.indexOf(q.toLowerCase());
+    if (idx === -1) return escapeHtml(text);
+    const a = escapeHtml(text.slice(0, idx));
+    const b = escapeHtml(text.slice(idx, idx + q.length));
+    const c = escapeHtml(text.slice(idx + q.length));
+    return a + "<strong>" + b + "</strong>" + c;
+  }
+
+  // --- data --------------------------------------------------------------
+
+  let PLACES = [];
+  let placesReady = false;
+  let placesError = null;
+
+  /**
+   * loadPlaces
+   *
+   * Purpose:
+   * Fetch the full feature list from `/api/features` once for client-side search.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Promise that resolves when the fetch completes (updates PLACES / error state).
+   */
+  async function loadPlaces() {
     try {
       const res = await fetch('/api/features', { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -63,10 +139,37 @@
     })[c]);
   }
 
+  // Split the query into whitespace tokens and require every token to
+  // appear somewhere in the haystack. This lets "library cannavino" match
+  // "James A. Cannavino Library" without caring about order.
+  /**
+   * tokenize
+   *
+   * Purpose:
+   * Split a query into lowercase tokens used for AND-style matching.
+   *
+   * Args:
+   * q - Raw search string.
+   *
+   * Returns:
+   * Array of non-empty lowercase tokens.
+   */
   function tokenize(q) {
     return q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   }
 
+  /**
+   * placeHaystack
+   *
+   * Purpose:
+   * Build a single lowercase string containing fields to match against tokens.
+   *
+   * Args:
+   * p - Feature object with name, subtitle, kind.
+   *
+   * Returns:
+   * Lowercase concatenated haystack string.
+   */
   function placeHaystack(p) {
     return (
       (p.name || '') + ' ' +
@@ -75,6 +178,20 @@
     ).toLowerCase();
   }
 
+  // Score so exact / prefix matches on the title rise to the top.
+  /**
+   * scorePlace
+   *
+   * Purpose:
+   * Assign a numeric relevance score so better name matches sort earlier.
+   *
+   * Args:
+   * p - Feature to score.
+   * tokens - Token array from tokenize().
+   *
+   * Returns:
+   * Non-negative score, or -1 if any token is missing from the haystack.
+   */
   function scorePlace(p, tokens) {
     const name = (p.name || '').toLowerCase();
     let score = 0;
@@ -89,6 +206,18 @@
     return score;
   }
 
+  /**
+   * filterPlaces
+   *
+   * Purpose:
+   * Return the top matching features for the current query string.
+   *
+   * Args:
+   * q - Raw search string.
+   *
+   * Returns:
+   * Up to 50 features, highest score first.
+   */
   function filterPlaces(q) {
     const tokens = tokenize(q);
     if (!tokens.length) return [];
@@ -104,6 +233,101 @@
     return scored.slice(0, 50).map((x) => x.p);
   }
 
+
+  let phraseIdx = 0;
+  let cycleTimer = null;
+
+  /**
+   * stopPlaceholderCycle
+   *
+   * Purpose:
+   * Clear the rotating-placeholder interval when the input is not “faux empty”.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
+  function stopPlaceholderCycle() {
+    if (cycleTimer) {
+      window.clearInterval(cycleTimer);
+      cycleTimer = null;
+    }
+  }
+
+  /**
+   * advancePlaceholderPhrase
+   *
+   * Purpose:
+   * Advance to the next animated placeholder phrase after a short exit animation.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
+  function advancePlaceholderPhrase() {
+    if (!wrapEl.classList.contains("search-input-wrap--faux-empty")) return;
+    placeEl.classList.add("search-placeholder-cycle--exit");
+    window.setTimeout(() => {
+      if (!wrapEl.classList.contains("search-input-wrap--faux-empty")) {
+        placeEl.classList.remove("search-placeholder-cycle--exit");
+        return;
+      }
+      phraseIdx = (phraseIdx + 1) % PLACEHOLDER_PHRASES.length;
+      placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx];
+      placeEl.classList.remove("search-placeholder-cycle--exit");
+    }, 450);
+  }
+
+  /**
+   * startPlaceholderCycle
+   *
+   * Purpose:
+   * Start the interval that rotates placeholder phrases when appropriate.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
+  function startPlaceholderCycle() {
+    if (cycleTimer) return;
+    cycleTimer = window.setInterval(advancePlaceholderPhrase, 4800);
+  }
+
+  /**
+   * syncPlaceholderOverlay
+   *
+   * Purpose:
+   * Toggle faux-placeholder visibility, copy, and cycling based on value/focus.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
+  function syncPlaceholderOverlay() {
+    const q = input.value.trim();
+    const focused = document.activeElement === input;
+    const showFaux = !q && !focused;
+    wrapEl.classList.toggle("search-input-wrap--faux-empty", showFaux);
+    if (placeEl) {
+      placeEl.classList.toggle("search-placeholder-cycle--off", !showFaux);
+      if (showFaux) {
+        placeEl.classList.remove("search-placeholder-cycle--exit");
+        placeEl.textContent =
+          PLACEHOLDER_PHRASES[phraseIdx % PLACEHOLDER_PHRASES.length];
+        startPlaceholderCycle();
+      } else {
+        stopPlaceholderCycle();
+      }
+    }
+    
   function highlight(text, q) {
     if (!q) return escapeHtml(text);
     const lower = text.toLowerCase();
@@ -123,6 +347,20 @@
 
   const KIND_LABEL = { building: 'Building', path: 'Path', poi: 'Place' };
 
+  /**
+   * renderResultRow
+   *
+   * Purpose:
+   * Build one <li> HTML string for a search dropdown row.
+   *
+   * Args:
+   * p - Feature to render.
+   * q - Current query (for highlight()).
+   * i - Row index (for id/data-idx).
+   *
+   * Returns:
+   * HTML string for a single result row.
+   */
   function renderResultRow(p, q, i) {
     const kindClass = `search-result__kind--${p.kind || 'poi'}`;
     const kindLabel = KIND_LABEL[p.kind] || 'Place';
@@ -141,114 +379,44 @@
     );
   }
 
-  // ---- mode switching --------------------------------------------------
+  let currentMatches = [];
 
   /**
-   * Switch the sidebar card between "single" search and "directions" mode.
+   * emptyMessage
    *
-   * `opts.focus` defaults to true because mode changes are almost always
-   * user-initiated (button click, right-click menu) and want keyboard
-   * focus in the relevant field. The initial boot call passes false so
-   * we don't steal focus from the map on page load.
+   * Purpose:
+   * User-facing message when there are zero matches (loading, error, or none).
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Short status string.
    */
-  function setMode(mode, opts = {}) {
-    const focus = opts.focus !== false;
-    card.dataset.mode = mode;
-    card.querySelectorAll('[data-mode]').forEach((el) => {
-      el.hidden = el.dataset.mode !== mode;
-    });
-    if (mode === 'single') {
-      single.syncPlaceholder();
-      if (focus) setTimeout(() => single.input.focus(), 0);
-    } else if (mode === 'directions') {
-      // Defer the focus decision so it reflects any input values the
-      // caller sets *after* switching modes (e.g. the right-click
-      // context menu flips us in via mmap:route-changed and then fills
-      // the From field — we want focus on To, not From).
-      if (focus) {
-        setTimeout(() => {
-          const target = !directions.fromInput.value
-            ? directions.fromInput
-            : directions.toInput;
-          target.focus();
-        }, 0);
-      }
-      directions.sync();
-    }
+  function emptyMessage() {
+    if (!placesReady && !placesError) return "Loading campus data…";
+    if (placesError) return "Could not load campus data";
+    return "No matching places";
   }
 
-  // ---- single-search mode ----------------------------------------------
-
-  const single = (() => {
-    const input = document.getElementById('search-q');
-    const list = document.getElementById('search-results');
-    const placeEl = document.getElementById('search-placeholder-cycle');
-    const wrapEl = document.getElementById('search-input-wrap');
-
-    const PLACEHOLDER_PHRASES = [
-      'Find Red Foxes…',
-      'Traverse Marist…',
-      'Search places…',
-      'Where in Hancock am I?',
-      'Lower Town vs Upper Town…',
-      'Plot your next sprint to class…',
-      'The Hudson has opinions…',
-      'Lost? Join the club.',
-      'Fox dens, cafés, and naps…',
-      'Avoid the stairs (good luck)…',
-      'Rotunda traffic report…',
-      'River views, river moods…',
-    ];
-
-    let phraseIdx = 0;
-    let cycleTimer = null;
-    let currentMatches = [];
-
-    function stopCycle() {
-      if (cycleTimer) {
-        window.clearInterval(cycleTimer);
-        cycleTimer = null;
-      }
-    }
-
-    function advancePhrase() {
-      if (!placeEl) return;
-      if (!wrapEl.classList.contains('search-input-wrap--faux-empty')) return;
-      placeEl.classList.add('search-placeholder-cycle--exit');
-      window.setTimeout(() => {
-        if (!wrapEl.classList.contains('search-input-wrap--faux-empty')) {
-          placeEl.classList.remove('search-placeholder-cycle--exit');
-          return;
-        }
-        phraseIdx = (phraseIdx + 1) % PLACEHOLDER_PHRASES.length;
-        placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx];
-        placeEl.classList.remove('search-placeholder-cycle--exit');
-      }, 450);
-    }
-
-    function startCycle() {
-      if (cycleTimer) return;
-      cycleTimer = window.setInterval(advancePhrase, 4800);
-    }
-
-    function syncPlaceholder() {
-      const q = input.value.trim();
-      const focused = document.activeElement === input;
-      const showFaux = !q && !focused;
-      wrapEl.classList.toggle('search-input-wrap--faux-empty', showFaux);
-      if (placeEl) {
-        placeEl.classList.toggle('search-placeholder-cycle--off', !showFaux);
-        if (showFaux) {
-          placeEl.classList.remove('search-placeholder-cycle--exit');
-          placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx % PLACEHOLDER_PHRASES.length];
-          startCycle();
-        } else {
-          stopCycle();
-        }
-      }
-    }
-
-    function closeDropdown() {
+  /**
+   * syncResults
+   *
+   * Purpose:
+   * Recompute matches from the input value and refresh the dropdown DOM.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
+  function syncResults() {
+    const q = input.value;
+    const matches = filterPlaces(q);
+    currentMatches = matches;
+    input.setAttribute("aria-expanded", matches.length > 0 ? "true" : "false");
+    if (!q.trim()) {
       list.hidden = true;
       card.classList.remove('search-card--open');
       input.setAttribute('aria-expanded', 'false');
@@ -277,29 +445,22 @@
       card.classList.add('search-card--open');
     }
 
-    function selectPlace(p) {
-      if (!p) return;
-      const mmap = window.MaristMap;
-      if (mmap && mmap.map && Number.isFinite(p.lon) && Number.isFinite(p.lat)) {
-        mmap.map.flyTo({
-          center: [p.lon, p.lat],
-          zoom: Math.max(mmap.map.getZoom(), 18),
-          speed: 1.2,
-          essential: true,
-        });
-        new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: '22rem' })
-          .setLngLat([p.lon, p.lat])
-          .setHTML(
-            `<strong>${escapeHtml(p.name || '')}</strong>` +
-            `<div class="tag">${escapeHtml(p.subtitle || '')}</div>`
-          )
-          .addTo(mmap.map);
-      }
-      input.value = p.name || '';
-      closeDropdown();
-      input.blur();
-      syncPlaceholder();
-    }
+  /**
+   * onInput
+   *
+   * Purpose:
+   * Input handler: update results and placeholder state together.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
+  function onInput() {
+    syncResults();
+    syncPlaceholderOverlay();
+  }
 
     list.addEventListener('click', (e) => {
       const row = e.target.closest('.search-result');
@@ -362,31 +523,58 @@
       pane.dataset.active = which;
     }
 
-    function currentInput() {
-      return active === 'from' ? fromInput : toInput;
-    }
+  /**
+   * closeDropdown
+   *
+   * Purpose:
+   * Hide the results list and clear aria-expanded for accessibility.
+   *
+   * Args:
+   * None.
+   *
+   * Returns:
+   * Nothing.
+   */
+  function closeDropdown() {
+    list.hidden = true;
+    card.classList.remove("search-card--open");
+    input.setAttribute("aria-expanded", "false");
+  }
 
-    function closeDropdown() {
-      list.hidden = true;
-      list.innerHTML = '';
-    }
-
-    function sync() {
-      const q = currentInput().value;
-      const matches = filterPlaces(q);
-      currentMatches = matches;
-      if (!q.trim()) {
-        closeDropdown();
-        return;
-      }
-      if (matches.length === 0) {
-        list.innerHTML =
-          `<li class="search-result search-result--empty" role="option">${escapeHtml(emptyMessage())}</li>`;
-        list.hidden = false;
-        return;
-      }
-      list.innerHTML = matches.map((p, i) => renderResultRow(p, q, i)).join('');
-      list.hidden = false;
+  /**
+   * selectPlace
+   *
+   * Purpose:
+   * Fly the map to a feature, show a popup, sync input, and close the dropdown.
+   *
+   * Args:
+   * p - Selected feature with lon/lat and display fields (or null/undefined).
+   *
+   * Returns:
+   * Nothing.
+   */
+  function selectPlace(p) {
+    if (!p) return;
+    const mmap = window.MaristMap;
+    if (mmap && mmap.map && Number.isFinite(p.lon) && Number.isFinite(p.lat)) {
+      // flyTo lands smoothly even if we're already near the target.
+      mmap.map.flyTo({
+        center: [p.lon, p.lat],
+        zoom: Math.max(mmap.map.getZoom(), 18),
+        speed: 1.2,
+        essential: true,
+      });
+      new maplibregl.Popup({
+        closeButton: true,
+        closeOnClick: true,
+        maxWidth: "22rem",
+      })
+        .setLngLat([p.lon, p.lat])
+        .setHTML(
+          `<strong>${escapeHtml(p.name || "")}</strong>` +
+            `<div class="tag">${escapeHtml(p.subtitle || "")}</div>`,
+        )
+        .addTo(mmap.map);
     }
 
     function pushSelection(which, place) {
