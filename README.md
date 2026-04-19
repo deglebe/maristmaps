@@ -77,3 +77,25 @@ list. In short:
 | init    | —          | one-shot: osm2pgsql + `db/load_data.py`          |
 | web     | 8000       | gunicorn + Flask (prod only; dev uses `run.py`)  |
 | caddy   | 80/443     | prod only: TLS + reverse proxy                   |
+
+## Tools
+
+Two internal tools for building out the indoor dataset. Not linked from
+the public header — reachable by direct URL only, so drop them into
+your browser when you need them.
+
+| tool             | route            | role                                             |
+|------------------|------------------|--------------------------------------------------|
+| survey (GeoLog)  | `/tools/survey`  | mobile GPS logger for field surveying            |
+| edit (csv viz)   | `/tools/edit`    | desktop CSV editor for cleanup + hallway graphs  |
+
+Typical workflow: walk a building with `/tools/survey` on your phone,
+logging rooms / entrances / stairs / elevators against live GPS. It
+exports a CSV matching `db/buildings/*.csv` exactly. Drop that CSV into
+`/tools/edit` on a laptop to fix up positions, draw hallway graphs
+(the `hallway` mode), and verify routes (`route` mode) before
+committing. Both tools read the same `map_config` blob as the main
+map page, so the Martin URL, campus center, and zoom stay in sync.
+
+Once the CSV looks right, save it into `db/buildings/` and re-run
+`./scripts/init.sh` (or `--prod`) to reload the `locations` table.
