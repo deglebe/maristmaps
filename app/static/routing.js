@@ -370,6 +370,30 @@
       if (state.inflight) state.inflight.abort();
       state.inflight = null;
       state.route = route;
+      // Populate state.from / state.to from the route's endpoints so the
+      // directions panel inputs reflect what the agent actually routed.
+      // The route shape comes from app/trip.py: trackpoints[0] is the
+      // start (lon, lat) and trackpoints[-1] is the end. The agent also
+      // sends back origin_label / destination_label.
+      const pts = route.trackpoints;
+      if (Array.isArray(pts) && pts.length >= 2) {
+        const [fLon, fLat] = pts[0];
+        const [tLon, tLat] = pts[pts.length - 1];
+        if (Number.isFinite(fLon) && Number.isFinite(fLat)) {
+          state.from = {
+            lon: fLon,
+            lat: fLat,
+            label: route.origin_label || null,
+          };
+        }
+        if (Number.isFinite(tLon) && Number.isFinite(tLat)) {
+          state.to = {
+            lon: tLon,
+            lat: tLat,
+            label: route.destination_label || null,
+          };
+        }
+      }
       renderMap();
       fitRoute();
       emitChange({ status: 'ready' });

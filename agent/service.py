@@ -14,7 +14,7 @@ from openai import OpenAI
 from agent.logutil import get_logger, trunc_preview
 from agent.nav_context import reset_navigation_result, take_navigation_plan
 from agent.prompts import BITCH_MODE_SYSTEM_PROMPT, SYSTEM_PROMPT
-from agent.tools import navigate
+from agent.tools import find_place, navigate
 from app.locations import list_buildings
 
 log = get_logger("service")
@@ -28,13 +28,28 @@ def _bitch_mode_enabled() -> bool:
     return v in ("1", "true", "yes", "on")
 
 
-def _buildings_hint() -> str:
-    names = list_buildings()
-    if not names:
-        return ""
-    shown = names[:40]
-    tail = "" if len(names) <= len(shown) else f", … (+{len(names) - len(shown)} more)"
-    return "Known buildings include: " + ", ".join(shown) + tail + "."
+def _places_hint() -> str:
+    """Tell the model which buildings have indoor (room-level) data.
+
+    Off-map places (other campus buildings, neighboring shops, POIs) are
+    NOT enumerated here — the catalog is too large and grows with OSM
+    imports. The model resolves those by calling ``find_place`` (or
+    just letting ``navigate`` do its own OSM fallback).
+    """
+    indoor = list_buildings()
+    if not indoor:
+        return (
+            "No indoor buildings are mapped yet. For any destination, call "
+            "`find_place` first to confirm the name resolves on the map."
+        )
+    return (
+        "Indoor buildings (these support `destination_room` / `current_room`): "
+        + ", ".join(indoor)
+        + ". Any other place name (off-campus shops, restaurants, parks, "
+        "unmapped campus buildings, etc.) is resolved at tool time — pass it "
+        "as `destination_building` (no room) or call `find_place` first if "
+        "the request is vague or ambiguous."
+    )
 
 
 def get_agent_graph():
@@ -47,10 +62,10 @@ def get_agent_graph():
         raise RuntimeError("OPENAI_API_KEY is not set")
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=api_key)
     base = BITCH_MODE_SYSTEM_PROMPT if want == "bitch" else SYSTEM_PROMPT
-    system = base.strip() + "\n\n" + _buildings_hint()
+    system = base.strip() + "\n\n" + _places_hint()
     _graph = create_agent(
         model=llm,
-        tools=[navigate],
+        tools=[find_place, navigate],
         system_prompt=system,
     )
     _graph_mode = want
@@ -105,9 +120,14 @@ def _format_user_message(
         block = "Current location context:\n" + "\n".join(loc_lines)
         if coords_ok:
             block += (
-                "\n\nThese map coordinates are a complete starting point. "
-                "Pass them to navigate as current_lon and current_lat. "
-                "Do NOT ask the user where they are starting from."
+                "\n\nUsing this context block (FALLBACK ONLY): if the user "
+                "did NOT explicitly name a starting building or room in "
+                "their request, treat these map coordinates as the start "
+                "and pass them to navigate as current_lon and current_lat. "
+                "If the user DID name a start (e.g. \"from Hancock 2020 "
+                "...\"), pass current_building / current_room from the "
+                "user's words and ignore these coordinates. Either way, do "
+                "NOT ask the user where they are starting from."
             )
         parts.append(block)
     else:
@@ -119,6 +139,10 @@ def _format_user_message(
 
 
 def _had_navigate_tool_call(messages: list) -> bool:
+    """True iff the model attempted ``navigate`` (the tool that actually
+    plans a trip). ``find_place`` lookups don't count — calling only that
+    means the model gathered info but never committed.
+    """
     for m in messages:
         if isinstance(m, AIMessage):
             for tc in (m.tool_calls or []):
