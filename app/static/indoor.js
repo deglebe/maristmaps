@@ -1,35 +1,28 @@
-/* Indoor endpoint controls + step-list renderer.
+/* Indoor endpoint state + step-list renderer.
+ *
+ * This module used to own two per-side autocomplete inputs that sat
+ * beside the outdoor From/To fields. That duplicated the search surface,
+ * so the per-side autocomplete now lives inside the unified directions
+ * picker in search.js. What remains here:
+ *
+ *   - The indoor target index (rooms / entrances / buildings with
+ *     indoor data) fetched from /api/indoor/index, used by setSide() to
+ *     resolve bare endpoint payloads into full targets.
+ *   - The {from, to, preferElevator} state + `mmap:indoor-changed`
+ *     event that routing.js listens on to trigger /api/route calls.
+ *   - The step-list renderer (renderSteps) and the shared icon palette
+ *     (ICONS / iconNameForStep) that routing.js uses for on-map markers.
  */
-
 (function () {
   const state = {
-    targets: [],        // flat list from /api/indoor/index
-    from: null,         // { endpoint, label } | null
+    targets: [],       // full list from /api/indoor/index
+    from: null,        // { endpoint, label, kind, building } | null
     to: null,
     preferElevator: false,
   };
 
-  const els = {
-    fromInput: document.getElementById('directions-from-indoor'),
-    fromList: document.getElementById('directions-from-indoor-results'),
-    fromClear: document.getElementById('directions-clear-from-indoor-btn'),
-    toInput: document.getElementById('directions-to-indoor'),
-    toList: document.getElementById('directions-to-indoor-results'),
-    toClear: document.getElementById('directions-clear-to-indoor-btn'),
-    elev: document.getElementById('directions-prefer-elevator'),
-    steps: document.getElementById('directions-steps'),
-  };
-
-  if (!els.fromInput || !els.toInput) {
-    window.MaristIndoor = {
-      snapshot: () => ({ from: null, to: null, preferElevator: false }),
-      setSide: () => {},
-      swap: () => {},
-      renderSteps: () => {},
-      ready: Promise.resolve(),
-    };
-    return;
-  }
+  const elev = document.getElementById('directions-prefer-elevator');
+  const steps = document.getElementById('directions-steps');
 
   // --- load target index ------------------------------------------------
 
@@ -47,51 +40,16 @@
     }
   })();
 
-  // --- matcher ----------------------------------------------------------
+  // --- prefer-elevator toggle ------------------------------------------
 
-  function tokenize(q) {
-    return String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (elev) {
+    elev.addEventListener('change', () => {
+      state.preferElevator = !!elev.checked;
+      emit();
+    });
   }
 
-  // Return [score, matchedTokens] for one target vs one query.
-  // Returns score <= 0 when not all query tokens had at least a substring
-  // hit. Keeping the function pure makes it trivial to unit-test later.
-  function scoreTarget(target, queryTokens) {
-    if (!queryTokens.length) return [0, []];
-    const targetTokens = target.tokens || [];
-    let total = 0;
-    for (const qt of queryTokens) {
-      let best = 0;
-      for (const tt of targetTokens) {
-        if (tt === qt) { best = Math.max(best, 6); break; }
-        if (tt.startsWith(qt)) { best = Math.max(best, 5); continue; }
-        if (tt.includes(qt))   { best = Math.max(best, 2); continue; }
-      }
-      if (best === 0) return [-1, []]; // all-tokens-must-hit
-      total += best;
-    }
-    // Gentle priority: buildings > rooms > entrances when scores are tied.
-    const kindBoost = ({ building: 0.5, room: 0.25, entrance: 0 }[target.kind] || 0);
-    return [total + kindBoost, queryTokens];
-  }
-
-  function searchTargets(q, limit = 12) {
-    const toks = tokenize(q);
-    if (!toks.length) return [];
-    const scored = [];
-    for (const t of state.targets) {
-      const [s] = scoreTarget(t, toks);
-      if (s > 0) scored.push({ t, s });
-    }
-    scored.sort((a, b) =>
-      b.s - a.s
-      || (a.t.building || '').localeCompare(b.t.building || '')
-      || (a.t.label || '').localeCompare(b.t.label || '')
-    );
-    return scored.slice(0, limit).map((x) => x.t);
-  }
-
-  // --- rendering --------------------------------------------------------
+  // --- rendering utils (shared with step renderer) ---------------------
 
   function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({
@@ -99,157 +57,26 @@
     })[c]);
   }
 
-  function renderRow(t, i, q) {
-    const kind = t.kind || 'room';
-    return (
-      `<li class="search-result indoor-result indoor-result--${kind}" ` +
-      `role="option" data-idx="${i}">` +
-      `<span class="indoor-result__icon" aria-hidden="true"></span>` +
-      `<span class="search-result__text">` +
-      `<span class="search-result__title">${highlight(t.label || '', q)}</span>` +
-      `<span class="search-result__sub">${escapeHtml(t.sublabel || '')}</span>` +
-      `</span>` +
-      `<span class="search-result__kind search-result__kind--${kind}">${escapeHtml(kind)}</span>` +
-      `</li>`
-    );
-  }
-
-  function highlight(text, q) {
-    const toks = tokenize(q);
-    if (!toks.length) return escapeHtml(text);
-    // Highlight the longest query token that appears in the text.
-    const lower = String(text).toLowerCase();
-    for (const qt of toks.slice().sort((a, b) => b.length - a.length)) {
-      const idx = lower.indexOf(qt);
-      if (idx >= 0) {
-        return (
-          escapeHtml(text.slice(0, idx))
-          + '<strong>' + escapeHtml(text.slice(idx, idx + qt.length)) + '</strong>'
-          + escapeHtml(text.slice(idx + qt.length))
-        );
-      }
-    }
-    return escapeHtml(text);
-  }
-
-  // --- per-side controllers --------------------------------------------
-
-  function makeSide(side) {
-    const input = side === 'from' ? els.fromInput : els.toInput;
-    const list = side === 'from' ? els.fromList : els.toList;
-    const clearBtn = side === 'from' ? els.fromClear : els.toClear;
-
-    let current = [];
-
-    function sync() {
-      const q = input.value;
-      const matches = searchTargets(q);
-      current = matches;
-      if (!q.trim()) {
-        list.hidden = true;
-        list.innerHTML = '';
-        return;
-      }
-      if (!matches.length) {
-        list.innerHTML =
-          `<li class="search-result search-result--empty" role="option">No matches</li>`;
-        list.hidden = false;
-        return;
-      }
-      list.innerHTML = matches.map((t, i) => renderRow(t, i, q)).join('');
-      list.hidden = false;
-    }
-
-    function closeList() {
-      list.hidden = true;
-    }
-
-    function pick(target) {
-      if (!target) return;
-      input.value = target.label + (target.kind === 'room' ? '' : '');
-      // For rooms, show "1021 · Hancock" so the user can tell which
-      // building they committed to without opening the dropdown again.
-      if (target.building && target.kind !== 'building') {
-        input.value = `${target.label} · ${target.building}`;
-      } else {
-        input.value = target.label;
-      }
-      closeList();
-      setState(side, target);
-    }
-
-    list.addEventListener('click', (e) => {
-      const row = e.target.closest('.search-result');
-      if (!row) return;
-      const idx = Number(row.dataset.idx);
-      if (!Number.isFinite(idx)) return;
-      pick(current[idx]);
-    });
-
-    input.addEventListener('input', () => {
-      // Typing invalidates the previously-committed pick until the user
-      // selects again — otherwise every keystroke would re-fire routing
-      // against a stale endpoint.
-      if (state[side]) setState(side, null, { silent: false });
-      sync();
-    });
-    input.addEventListener('focus', sync);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && current.length) {
-        e.preventDefault();
-        pick(current[0]);
-      } else if (e.key === 'Escape') {
-        closeList();
-        input.blur();
-      }
-    });
-
-    if (clearBtn) {
-      clearBtn.addEventListener('click', () => {
-        input.value = '';
-        closeList();
-        setState(side, null);
-        input.focus();
-      });
-    }
-
-    return { input, list, sync, closeList };
-  }
-
-  const fromSide = makeSide('from');
-  const toSide = makeSide('to');
-
-  document.addEventListener('click', (e) => {
-    const card = document.getElementById('search-card');
-    if (card && !card.contains(e.target)) {
-      fromSide.closeList();
-      toSide.closeList();
-    }
-  });
-
-  if (els.elev) {
-    els.elev.addEventListener('change', () => {
-      state.preferElevator = !!els.elev.checked;
-      emit();
-    });
-  }
-
   // --- state + public API ----------------------------------------------
-
-  function setState(side, target, { silent = false } = {}) {
-    const next = target
-      ? { endpoint: target.endpoint, label: target.label, kind: target.kind, building: target.building }
-      : null;
-    const prev = state[side];
-    if (sameState(prev, next)) return;
-    state[side] = next;
-    if (!silent) emit();
-  }
 
   function sameState(a, b) {
     if (a === b) return true;
     if (!a || !b) return false;
     return JSON.stringify(a.endpoint) === JSON.stringify(b.endpoint);
+  }
+
+  function setState(side, target, { silent = false } = {}) {
+    const next = target
+      ? {
+        endpoint: target.endpoint,
+        label: target.label,
+        kind: target.kind,
+        building: target.building,
+      }
+      : null;
+    if (sameState(state[side], next)) return;
+    state[side] = next;
+    if (!silent) emit();
   }
 
   function snapshot() {
@@ -266,46 +93,50 @@
     }));
   }
 
-  /** Apply an indoor endpoint programmatically. No-op if target is null. */
+  /**
+   * Apply an indoor endpoint programmatically. Accepts either a full
+   * target (from state.targets) or a bare dict like
+   *   { endpoint: {kind:'room', building:'Hancock', room:'1021'},
+   *     label: '1021', kind: 'room', building: 'Hancock' }
+   * Falls back to looking up the real target by endpoint payload so the
+   * caller gets proper tokens/sublabel for free.
+   * Returns true on success, false if the endpoint doesn't match any
+   * known target.
+   */
   function setSide(side, target) {
     if (target == null) {
-      const input = side === 'from' ? els.fromInput : els.toInput;
-      input.value = '';
       setState(side, null);
       return true;
     }
-    // Accept either a full target (from our list) or a bare endpoint dict.
     if (!target.tokens) {
-      // Try to find a matching target by its endpoint payload.
       const found = state.targets.find((t) =>
         JSON.stringify(t.endpoint) === JSON.stringify(target.endpoint || target),
       );
-      if (!found) return false;
-      target = found;
+      if (found) target = found;
+      // If no match, still accept: caller may have manually constructed
+      // an endpoint (e.g. for a building that's not in locations). The
+      // server can still route kind=building by name even without an
+      // indexed target.
     }
-    const input = side === 'from' ? els.fromInput : els.toInput;
-    input.value = target.building && target.kind !== 'building'
-      ? `${target.label} · ${target.building}`
-      : target.label;
     setState(side, target);
     return true;
   }
 
   function swap() {
     const a = state.from, b = state.to;
-    const aText = els.fromInput.value, bText = els.toInput.value;
-    state.from = b; state.to = a;
-    els.fromInput.value = bText; els.toInput.value = aText;
+    state.from = b;
+    state.to = a;
     emit();
   }
 
   // --- step list rendering ---------------------------------------------
 
   function renderSteps(route) {
-    const ol = els.steps;
+    const ol = steps;
     if (!ol) return;
     if (!route || !Array.isArray(route.phases) || !route.phases.length) {
-      ol.hidden = true; ol.innerHTML = '';
+      ol.hidden = true;
+      ol.innerHTML = '';
       return;
     }
     const parts = [];
@@ -346,19 +177,11 @@
     );
   }
 
-  // ---- shared icon SVGs ------------------------------------------------
+  // ---- shared icon SVGs -----------------------------------------------
   //
   // Reused between step rows (inline chips) and map markers (routing.js).
   // Shapes match tools/csv_viz.html so anyone familiar with that debugger
-  // recognizes them:
-  //   - door:     blue rectangle (entrance)
-  //   - stairs:   orange triangle
-  //   - elevator: red triangle pointing up, with base bar
-  //   - start/end dots are drawn by the existing map circle layer.
-  //
-  // Each builder takes a pixel size and returns an SVG string. Keeping
-  // these as string-returning functions lets callers scale for chips vs
-  // full markers without touching the path definitions.
+  // recognizes them.
 
   const ICONS = {
     door(size = 14) {
@@ -380,8 +203,6 @@
       );
     },
     elevator(size = 14) {
-      // Red up-triangle with a short base bar beneath it — reads as an
-      // elevator-up pictogram at small sizes.
       return (
         `<svg width="${size}" height="${size}" viewBox="0 0 14 14" aria-hidden="true">` +
         `<path d="M7 2 L12 10 L2 10 Z" fill="#e74c3c" ` +
@@ -393,9 +214,6 @@
     },
   };
 
-  // Map step.kind (and connector_kind for change_floor / exit_connector)
-  // to an icon name. Central so both the step renderer and the map-marker
-  // builder agree on which kind of step shows which glyph.
   function iconNameForStep(step) {
     switch (step.kind) {
       case 'exit_room':
@@ -434,8 +252,7 @@
     swap,
     renderSteps,
     ready: readyPromise,
-    // expose matcher + icons for callers (routing.js uses icons for map markers)
-    _search: searchTargets,
+    get targets() { return state.targets.slice(); },
     icons: ICONS,
     iconNameForStep,
   };

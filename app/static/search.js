@@ -1,19 +1,23 @@
 /* Sidebar controller for the search card.
  *
- * Two modes, same card:
+ * Two modes share the same card DOM:
  *
- *  "single"      A single search input. Selecting a result flies the map
- *                to that feature and drops a popup.
+ *   single      One search box. Matches across outdoor features
+ *               (buildings / POIs / paths from /api/features) AND indoor
+ *               targets (rooms / entrances / buildings from
+ *               /api/indoor/index). Buildings render with their rooms
+ *               inline underneath — Google-Maps style: type "hancock" and
+ *               you get Hancock on top then all its rooms; type "3194"
+ *               and you get every 3194 across the campus.
  *
- *  "directions"  Two inputs (From / To). Selecting a result in whichever
- *                input is active populates that field and calls
- *                MaristRoute.setStart/setEnd. When both are set, the
- *                routing module computes the path and dispatches
- *                `mmap:route-changed`; we reflect the summary + GPX
- *                button state from that event.
+ *   directions  Two outdoor fields (From / To) that populate
+ *               MaristRoute.setStart/setEnd. The indoor per-side pickers
+ *               live in their own inputs and are owned by indoor.js.
  *
- * One /api/features fetch feeds autocomplete in both modes. The
- * placeholder-cycling easter eggs are kept in single mode.
+ * We coordinate with other modules by DOM events:
+ *   - MaristRoute emits `mmap:route-changed` → we reflect the summary +
+ *     button state; auto-flip to directions mode if an endpoint was set
+ *     externally (e.g. the right-click "directions from here" menu).
  */
 (function () {
   const card = document.getElementById('search-card');
@@ -22,701 +26,995 @@
     return;
   }
 
-  const PLACEHOLDER_PHRASES = [
-    "Find Red Foxes…",
-    "Traverse Marist…",
-    "Search places…",
-    "Where in Hancock am I?",
-    "Lower Town vs Upper Town…",
-    "Plot your next sprint to class…",
-    "The Hudson has opinions…",
-    "Lost? Join the club.",
-    "Fox dens, cafés, and naps…",
-    "Avoid the stairs (good luck)…",
-    "Rotunda traffic report…",
-    "River views, river moods…",
-  ];
-
-  /**
-   * escapeHtml
-   *
-   * Purpose:
-   * Escape HTML special characters so untrusted text is safe in innerHTML.
-   *
-   * Args:
-   * s - Value (coerced to string) to escape.
-   *
-   * Returns:
-   * Escaped string safe to embed in HTML text nodes.
-   */
-  function escapeHtml(s) {
-    return String(s).replace(
-      /[&<>"']/g,
-      (c) =>
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        })[c],
-    );
-  }
-
-  /**
-   * highlight
-   *
-   * Purpose:
-   * Wrap the substring that matches the query in <strong> for the results list.
-   *
-   * Args:
-   * text - Original label text.
-   * q - Current search substring (case-insensitive match).
-   *
-   * Returns:
-   * HTML string (already entity-escaped except for inserted <strong> tags).
-   */
-  function highlight(text, q) {
-    if (!q) return escapeHtml(text);
-    const lower = text.toLowerCase();
-    const idx = lower.indexOf(q.toLowerCase());
-    if (idx === -1) return escapeHtml(text);
-    const a = escapeHtml(text.slice(0, idx));
-    const b = escapeHtml(text.slice(idx, idx + q.length));
-    const c = escapeHtml(text.slice(idx + q.length));
-    return a + "<strong>" + b + "</strong>" + c;
-  }
-
-  // --- data --------------------------------------------------------------
-
-  let PLACES = [];
-  let placesReady = false;
-  let placesError = null;
-
-  /**
-   * loadPlaces
-   *
-   * Purpose:
-   * Fetch the full feature list from `/api/features` once for client-side search.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Promise that resolves when the fetch completes (updates PLACES / error state).
-   */
-  async function loadPlaces() {
-    try {
-      const res = await fetch('/api/features', { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      FEATURES = Array.isArray(data.features) ? data.features : [];
-      featuresReady = true;
-      console.log(`[search] loaded ${FEATURES.length} features from /api/features`);
-      // Re-render whichever mode's results list was waiting on data.
-      if (single.input.value.trim()) single.sync();
-      if (isDirectionsMode()) directions.sync();
-    } catch (err) {
-      featuresError = err;
-      console.warn('[search] could not load /api/features:', err);
-      if (single.input.value.trim()) single.sync();
-      if (isDirectionsMode()) directions.sync();
-    }
-  }
-
-  // Expose the feature set so other scripts can snap to named places if
-  // they want (e.g. a future "where am I" control).
-  window.MaristSearch = {
-    get features() { return FEATURES.slice(); },
-    ready: featuresReadyPromise.then(() => FEATURES.slice()),
-  };
-
-  // ---- shared helpers --------------------------------------------------
+  // ---- small utilities -------------------------------------------------
 
   function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[c]);
   }
 
-  // Split the query into whitespace tokens and require every token to
-  // appear somewhere in the haystack. This lets "library cannavino" match
-  // "James A. Cannavino Library" without caring about order.
-  /**
-   * tokenize
-   *
-   * Purpose:
-   * Split a query into lowercase tokens used for AND-style matching.
-   *
-   * Args:
-   * q - Raw search string.
-   *
-   * Returns:
-   * Array of non-empty lowercase tokens.
-   */
   function tokenize(q) {
-    return q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
   }
 
-  /**
-   * placeHaystack
-   *
-   * Purpose:
-   * Build a single lowercase string containing fields to match against tokens.
-   *
-   * Args:
-   * p - Feature object with name, subtitle, kind.
-   *
-   * Returns:
-   * Lowercase concatenated haystack string.
-   */
-  function placeHaystack(p) {
-    return (
-      (p.name || '') + ' ' +
-      (p.subtitle || '') + ' ' +
-      (p.kind || '')
-    ).toLowerCase();
-  }
-
-  // Score so exact / prefix matches on the title rise to the top.
-  /**
-   * scorePlace
-   *
-   * Purpose:
-   * Assign a numeric relevance score so better name matches sort earlier.
-   *
-   * Args:
-   * p - Feature to score.
-   * tokens - Token array from tokenize().
-   *
-   * Returns:
-   * Non-negative score, or -1 if any token is missing from the haystack.
-   */
-  function scorePlace(p, tokens) {
-    const name = (p.name || '').toLowerCase();
-    let score = 0;
-    for (const t of tokens) {
-      const i = name.indexOf(t);
-      if (i === 0) score += 5;
-      else if (i > 0) score += 2;
-      else if (placeHaystack(p).includes(t)) score += 1;
-      else return -1;
+  function highlight(text, queryTokens) {
+    const s = String(text ?? '');
+    if (!queryTokens.length) return escapeHtml(s);
+    // Match the longest token that appears. Good enough visually — we
+    // don't try to highlight every occurrence of every token.
+    const lower = s.toLowerCase();
+    const ordered = queryTokens.slice().sort((a, b) => b.length - a.length);
+    for (const qt of ordered) {
+      const idx = lower.indexOf(qt);
+      if (idx >= 0) {
+        return (
+          escapeHtml(s.slice(0, idx))
+          + '<strong>' + escapeHtml(s.slice(idx, idx + qt.length)) + '</strong>'
+          + escapeHtml(s.slice(idx + qt.length))
+        );
+      }
     }
-    if (p.kind === 'building') score += 0.5;
-    return score;
+    return escapeHtml(s);
   }
 
-  /**
-   * filterPlaces
-   *
-   * Purpose:
-   * Return the top matching features for the current query string.
-   *
-   * Args:
-   * q - Raw search string.
-   *
-   * Returns:
-   * Up to 50 features, highest score first.
-   */
-  function filterPlaces(q) {
-    const tokens = tokenize(q);
-    if (!tokens.length) return [];
+  function fmtDistance(m) {
+    if (!Number.isFinite(m)) return '';
+    if (m < 1000) return `${Math.round(m)} m`;
+    return `${(m / 1000).toFixed(2)} km`;
+  }
+
+  function fmtDuration(s) {
+    if (!Number.isFinite(s)) return '';
+    const mins = Math.max(1, Math.round(s / 60));
+    if (mins < 60) return `${mins} min walk`;
+    const h = Math.floor(mins / 60);
+    const r = mins % 60;
+    return r ? `${h} h ${r} min walk` : `${h} h walk`;
+  }
+
+  // Rooms / entrances are ambiguous on their own ("3194" could be in
+  // several buildings), so we prefix the building name for a committed
+  // pick. Buildings and outdoor features (POIs / paths) already carry
+  // a full label in `name`.
+  function committedLabel(item) {
+    if (!item) return '';
+    if ((item.kind === 'room' || item.kind === 'entrance') && item.building) {
+      return `${item.building} ${item.name || ''}`.trim();
+    }
+    return item.name || '';
+  }
+
+  // ---- data model ------------------------------------------------------
+  //
+  // We build ONE flat `ITEMS` list out of two endpoints. Each item has:
+  //   id       stable dedup key
+  //   kind     'building' | 'poi' | 'path' | 'room' | 'entrance'
+  //   name     primary display label
+  //   subtitle secondary display label
+  //   building string | null   (set on room/entrance/building)
+  //   lon,lat  numbers (for flyTo / popup)
+  //   tokens   lowercase strings used by the matcher
+  //   endpoint opaque payload accepted by MaristRoute (indoor targets only)
+
+  let ITEMS = [];
+  // Buildings name -> array of room items in that building. Used to
+  // render child rows under a matched building header.
+  let ROOMS_BY_BUILDING = new Map();
+  let dataReady = false;
+  let dataError = null;
+
+  function buildingKey(name) {
+    return String(name || '').trim().toLowerCase();
+  }
+
+  function normalizeFeature(f) {
+    const name = f.name || '';
+    const tokens = [];
+    const lowerName = name.toLowerCase();
+    if (lowerName) {
+      tokens.push(lowerName);
+      for (const w of lowerName.split(/\s+/).filter(Boolean)) tokens.push(w);
+    }
+    if (f.subtitle) tokens.push(String(f.subtitle).toLowerCase());
+    if (f.kind) tokens.push(String(f.kind).toLowerCase());
+    return {
+      id: `feat/${f.id}`,
+      kind: f.kind || 'poi',
+      name,
+      subtitle: f.subtitle || '',
+      building: f.kind === 'building' ? name : null,
+      lon: Number(f.lon),
+      lat: Number(f.lat),
+      tokens,
+      endpoint: null,
+    };
+  }
+
+  function normalizeTarget(t) {
+    const kind = t.kind || 'room';
+    let idKey;
+    if (kind === 'building') idKey = `bld/${buildingKey(t.building || t.label)}`;
+    else if (kind === 'entrance') idKey = `ent/${buildingKey(t.building)}/${t.room || t.label}`;
+    else idKey = `room/${buildingKey(t.building)}/${t.room || t.label}`;
+    return {
+      id: `indoor/${idKey}`,
+      kind,
+      name: t.label || '',
+      subtitle: t.sublabel || '',
+      building: t.building || null,
+      floor: t.floor || null,
+      lon: Number(t.lon),
+      lat: Number(t.lat),
+      tokens: Array.isArray(t.tokens) ? t.tokens.slice() : [],
+      endpoint: t.endpoint || null,
+    };
+  }
+
+  function hasCoords(it) {
+    return Number.isFinite(it.lon) && Number.isFinite(it.lat);
+  }
+
+  async function loadData() {
+    const [featRes, idxRes] = await Promise.allSettled([
+      fetch('/api/features', { headers: { Accept: 'application/json' } }),
+      fetch('/api/indoor/index', { headers: { Accept: 'application/json' } }),
+    ]);
+
+    const items = [];
+    const seenFeatureBuildings = new Set();
+
+    if (featRes.status === 'fulfilled' && featRes.value.ok) {
+      try {
+        const data = await featRes.value.json();
+        for (const f of (data.features || [])) {
+          const it = normalizeFeature(f);
+          if (!hasCoords(it)) continue;
+          items.push(it);
+          if (it.kind === 'building' && it.name) {
+            seenFeatureBuildings.add(buildingKey(it.name));
+          }
+        }
+      } catch (err) {
+        console.warn('[search] /api/features parse failed:', err);
+      }
+    } else {
+      console.warn('[search] /api/features fetch failed');
+    }
+
+    const roomsByBuilding = new Map();
+
+    if (idxRes.status === 'fulfilled' && idxRes.value.ok) {
+      try {
+        const data = await idxRes.value.json();
+        for (const t of (data.targets || [])) {
+          const it = normalizeTarget(t);
+          if (it.kind === 'building') {
+            // Only add a target-building if /api/features didn't already
+            // provide it. This avoids two "Hancock" rows that differ
+            // only in subtitle, and prefers the outdoor centroid.
+            if (seenFeatureBuildings.has(buildingKey(it.name))) continue;
+            if (!hasCoords(it)) continue;
+            items.push(it);
+            continue;
+          }
+          if (!hasCoords(it)) continue;
+          items.push(it);
+          if (it.kind === 'room' && it.building) {
+            const key = buildingKey(it.building);
+            if (!roomsByBuilding.has(key)) roomsByBuilding.set(key, []);
+            roomsByBuilding.get(key).push(it);
+          }
+        }
+      } catch (err) {
+        console.warn('[search] /api/indoor/index parse failed:', err);
+      }
+    } else {
+      console.warn('[search] /api/indoor/index fetch failed');
+    }
+
+    // Stable natural-ish sort for children: numeric room codes first
+    // (001, 1021, ...), then lexicographic for the rest.
+    const roomCmp = (a, b) => {
+      const an = Number((a.name.match(/\d+/) || [])[0]);
+      const bn = Number((b.name.match(/\d+/) || [])[0]);
+      const aHas = Number.isFinite(an);
+      const bHas = Number.isFinite(bn);
+      if (aHas && bHas && an !== bn) return an - bn;
+      if (aHas && !bHas) return -1;
+      if (!aHas && bHas) return 1;
+      return a.name.localeCompare(b.name);
+    };
+    for (const list of roomsByBuilding.values()) list.sort(roomCmp);
+
+    ITEMS = items;
+    ROOMS_BY_BUILDING = roomsByBuilding;
+    dataReady = true;
+    console.log(
+      `[search] loaded ${items.length} items `
+      + `(buildings: ${items.filter((i) => i.kind === 'building').length}, `
+      + `rooms: ${items.filter((i) => i.kind === 'room').length})`,
+    );
+
+    // Re-render any open dropdowns now that data arrived.
+    if (single.input.value.trim()) single.sync();
+    if (isDirectionsMode()) directions.sync();
+  }
+
+  // ---- matcher ---------------------------------------------------------
+
+  // Per-token score: exact=6, prefix=5, substring=2. All tokens in the
+  // query must hit somewhere, else the item is excluded. Matches
+  // indoor.js's scoreTarget fairly closely so the two feel consistent.
+  function scoreItem(item, qTokens) {
+    if (!qTokens.length) return -1;
+    let total = 0;
+    const tgtTokens = item.tokens;
+    for (const qt of qTokens) {
+      let best = 0;
+      for (const tt of tgtTokens) {
+        if (tt === qt) { best = 6; break; }
+        if (tt.startsWith(qt)) best = Math.max(best, 5);
+        else if (tt.includes(qt)) best = Math.max(best, 2);
+      }
+      if (best === 0) return -1;
+      total += best;
+    }
+    // Tiebreak: prefer "bigger" kinds first so a building edges out a
+    // path of the same name.
+    const kindBoost = ({
+      building: 0.6, room: 0.3, entrance: 0.15, poi: 0.1, path: 0,
+    }[item.kind] || 0);
+    return total + kindBoost;
+  }
+
+  function search(q, limit = 40) {
+    const toks = tokenize(q);
+    if (!toks.length) return { tokens: toks, matches: [] };
     const scored = [];
-    for (const p of FEATURES) {
-      const s = scorePlace(p, tokens);
-      if (s >= 0) scored.push({ p, s });
+    for (const it of ITEMS) {
+      const s = scoreItem(it, toks);
+      if (s > 0) scored.push({ it, s });
     }
     scored.sort((a, b) =>
-      b.s - a.s ||
-      (a.p.name || '').localeCompare(b.p.name || '')
+      b.s - a.s
+      || (a.it.name || '').localeCompare(b.it.name || '')
     );
-    return scored.slice(0, 50).map((x) => x.p);
+    return { tokens: toks, matches: scored.slice(0, limit).map((x) => x.it) };
   }
 
+  // ---- rendering helpers ----------------------------------------------
 
-  let phraseIdx = 0;
-  let cycleTimer = null;
+  const KIND_LABEL = {
+    building: 'Building', path: 'Path', poi: 'Place',
+    room: 'Room', entrance: 'Entrance',
+  };
 
-  /**
-   * stopPlaceholderCycle
-   *
-   * Purpose:
-   * Clear the rotating-placeholder interval when the input is not “faux empty”.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Nothing.
-   */
-  function stopPlaceholderCycle() {
-    if (cycleTimer) {
-      window.clearInterval(cycleTimer);
-      cycleTimer = null;
-    }
-  }
-
-  /**
-   * advancePlaceholderPhrase
-   *
-   * Purpose:
-   * Advance to the next animated placeholder phrase after a short exit animation.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Nothing.
-   */
-  function advancePlaceholderPhrase() {
-    if (!wrapEl.classList.contains("search-input-wrap--faux-empty")) return;
-    placeEl.classList.add("search-placeholder-cycle--exit");
-    window.setTimeout(() => {
-      if (!wrapEl.classList.contains("search-input-wrap--faux-empty")) {
-        placeEl.classList.remove("search-placeholder-cycle--exit");
-        return;
-      }
-      phraseIdx = (phraseIdx + 1) % PLACEHOLDER_PHRASES.length;
-      placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx];
-      placeEl.classList.remove("search-placeholder-cycle--exit");
-    }, 450);
-  }
-
-  /**
-   * startPlaceholderCycle
-   *
-   * Purpose:
-   * Start the interval that rotates placeholder phrases when appropriate.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Nothing.
-   */
-  function startPlaceholderCycle() {
-    if (cycleTimer) return;
-    cycleTimer = window.setInterval(advancePlaceholderPhrase, 4800);
-  }
-
-  /**
-   * syncPlaceholderOverlay
-   *
-   * Purpose:
-   * Toggle faux-placeholder visibility, copy, and cycling based on value/focus.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Nothing.
-   */
-  function syncPlaceholderOverlay() {
-    const q = input.value.trim();
-    const focused = document.activeElement === input;
-    const showFaux = !q && !focused;
-    wrapEl.classList.toggle("search-input-wrap--faux-empty", showFaux);
-    if (placeEl) {
-      placeEl.classList.toggle("search-placeholder-cycle--off", !showFaux);
-      if (showFaux) {
-        placeEl.classList.remove("search-placeholder-cycle--exit");
-        placeEl.textContent =
-          PLACEHOLDER_PHRASES[phraseIdx % PLACEHOLDER_PHRASES.length];
-        startPlaceholderCycle();
-      } else {
-        stopPlaceholderCycle();
-      }
-    }
-    
-  function highlight(text, q) {
-    if (!q) return escapeHtml(text);
-    const lower = text.toLowerCase();
-    const idx = lower.indexOf(q.toLowerCase());
-    if (idx === -1) return escapeHtml(text);
-    const a = escapeHtml(text.slice(0, idx));
-    const b = escapeHtml(text.slice(idx, idx + q.length));
-    const c = escapeHtml(text.slice(idx + q.length));
-    return a + '<strong>' + b + '</strong>' + c;
-  }
-
-  function emptyMessage() {
-    if (!featuresReady && !featuresError) return 'Loading campus data…';
-    if (featuresError) return 'Could not load campus data';
-    return 'No matching places';
-  }
-
-  const KIND_LABEL = { building: 'Building', path: 'Path', poi: 'Place' };
-
-  /**
-   * renderResultRow
-   *
-   * Purpose:
-   * Build one <li> HTML string for a search dropdown row.
-   *
-   * Args:
-   * p - Feature to render.
-   * q - Current query (for highlight()).
-   * i - Row index (for id/data-idx).
-   *
-   * Returns:
-   * HTML string for a single result row.
-   */
-  function renderResultRow(p, q, i) {
-    const kindClass = `search-result__kind--${p.kind || 'poi'}`;
-    const kindLabel = KIND_LABEL[p.kind] || 'Place';
+  function renderRow(item, qTokens, rowIdx, opts = {}) {
+    const kind = item.kind || 'poi';
+    const kindClass = `search-result__kind--${kind}`;
+    const kindLabel = KIND_LABEL[kind] || 'Place';
+    const extraCls = opts.child ? ' search-result--child' : '';
     return (
-      `<li class="search-result" role="option" id="search-opt-${i}" tabindex="-1" ` +
-      `data-idx="${i}">` +
-      `<span class="search-result__icon" aria-hidden="true">` +
-      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6-4.35-6-10a6 6 0 1 1 12 0c0 5.65-6 10-6 10z"/><circle cx="12" cy="11" r="2.5"/></svg>` +
-      `</span>` +
+      `<li class="search-result${extraCls}" role="option" ` +
+      `id="search-opt-${rowIdx}" tabindex="-1" data-idx="${rowIdx}">` +
+      `<span class="search-result__icon search-result__icon--${kind}" aria-hidden="true"></span>` +
       `<span class="search-result__text">` +
-      `<span class="search-result__title">${highlight(p.name || '', q.trim())}</span>` +
-      `<span class="search-result__sub">${escapeHtml(p.subtitle || '')}</span>` +
+      `<span class="search-result__title">${highlight(item.name || '', qTokens)}</span>` +
+      `<span class="search-result__sub">${escapeHtml(item.subtitle || '')}</span>` +
       `</span>` +
       `<span class="search-result__kind ${kindClass}">${escapeHtml(kindLabel)}</span>` +
       `</li>`
     );
   }
 
-  let currentMatches = [];
-
-  /**
-   * emptyMessage
-   *
-   * Purpose:
-   * User-facing message when there are zero matches (loading, error, or none).
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Short status string.
-   */
   function emptyMessage() {
-    if (!placesReady && !placesError) return "Loading campus data…";
-    if (placesError) return "Could not load campus data";
-    return "No matching places";
+    if (!dataReady && !dataError) return 'Loading campus data…';
+    if (dataError) return 'Could not load campus data';
+    return 'No matching places';
   }
 
-  /**
-   * syncResults
-   *
-   * Purpose:
-   * Recompute matches from the input value and refresh the dropdown DOM.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Nothing.
-   */
-  function syncResults() {
-    const q = input.value;
-    const matches = filterPlaces(q);
-    currentMatches = matches;
-    input.setAttribute("aria-expanded", matches.length > 0 ? "true" : "false");
-    if (!q.trim()) {
+  // Arrange flat matches into a visually-grouped list:
+  //   - If a match is a building, inline its rooms as children below.
+  //   - Non-building matches render as regular rows.
+  //   - Each item appears at most once.
+  // Returns { rows, order } where `rows` is the HTML string and
+  // `order` is a flat array of items mapping rowIdx -> item (so the
+  // click/keyboard handlers can resolve a click to an item).
+  function buildGroupedRows(matches, qTokens, opts = {}) {
+    const rows = [];
+    const order = [];
+    const seen = new Set();
+    const CHILDREN_MAX = opts.childrenMax ?? 30;
+
+    const push = (item, { child = false } = {}) => {
+      const idx = order.length;
+      order.push(item);
+      rows.push(renderRow(item, qTokens, idx, { child }));
+      seen.add(item.id);
+    };
+
+    for (const it of matches) {
+      if (seen.has(it.id)) continue;
+      push(it);
+      if (it.kind === 'building' && it.name) {
+        const key = buildingKey(it.name);
+        const roomList = ROOMS_BY_BUILDING.get(key) || [];
+        let shown = 0;
+        for (const r of roomList) {
+          if (seen.has(r.id)) continue;
+          if (shown >= CHILDREN_MAX) break;
+          push(r, { child: true });
+          shown++;
+        }
+        if (roomList.length > shown) {
+          rows.push(
+            `<li class="search-result search-result--more" aria-hidden="true">` +
+            `+${roomList.length - shown} more rooms — refine your search</li>`
+          );
+          // Decoy row; no entry in `order` so it isn't clickable.
+        }
+      }
+    }
+    return { html: rows.join(''), order };
+  }
+
+  // ---- mode plumbing ---------------------------------------------------
+  //
+  // Both modes need to tell each other when to open/close. We stash the
+  // current mode in card.dataset.mode (which also drives CSS). Call
+  // setMode('single'|'directions', {focus}) to flip.
+
+  function setMode(mode, opts = {}) {
+    const focus = opts.focus !== false;
+    card.dataset.mode = mode;
+    const singlePane = card.querySelector('[data-mode="single"]');
+    const directionsPane = card.querySelector('[data-mode="directions"]');
+    if (singlePane) singlePane.hidden = (mode !== 'single');
+    if (directionsPane) directionsPane.hidden = (mode !== 'directions');
+    if (mode === 'single') {
+      single.closeDropdown();
+      single.syncPlaceholderOverlay();
+      if (focus) setTimeout(() => single.input.focus(), 0);
+    } else if (mode === 'directions') {
+      single.closeDropdown();
+      if (focus) {
+        // Defer so any pending mmap:route-changed event has populated
+        // selected state before we pick a side.
+        setTimeout(() => {
+          const which = directions.firstEmptySide();
+          const target = which === 'from'
+            ? directions.fromInput
+            : directions.toInput;
+          target.focus();
+        }, 0);
+      }
+      directions.sync();
+    }
+  }
+
+  function isDirectionsMode() {
+    return card.dataset.mode === 'directions';
+  }
+
+  // ---- single mode -----------------------------------------------------
+
+  const single = (() => {
+    const input = document.getElementById('search-q');
+    const list = document.getElementById('search-results');
+    const wrapEl = document.getElementById('search-input-wrap');
+    const placeEl = document.getElementById('search-placeholder-cycle');
+    const iconBtn = document.getElementById('search-icon-btn');
+
+    const PLACEHOLDER_PHRASES = [
+      'Find Red Foxes…',
+      'Traverse Marist…',
+      'Search places…',
+      'Where in Hancock am I?',
+      'Lower Town vs Upper Town…',
+      'Plot your next sprint to class…',
+      'The Hudson has opinions…',
+      'Lost? Join the club.',
+      'Fox dens, cafés, and naps…',
+      'Avoid the stairs (good luck)…',
+      'Rotunda traffic report…',
+      'River views, river moods…',
+    ];
+    let phraseIdx = 0;
+    let cycleTimer = null;
+
+    let currentOrder = [];
+
+    function syncPlaceholderOverlay() {
+      if (!wrapEl || !placeEl) return;
+      const q = input.value.trim();
+      const focused = document.activeElement === input;
+      const showFaux = !q && !focused && card.dataset.mode === 'single';
+      wrapEl.classList.toggle('search-input-wrap--faux-empty', showFaux);
+      placeEl.classList.toggle('search-placeholder-cycle--off', !showFaux);
+      if (showFaux) {
+        placeEl.classList.remove('search-placeholder-cycle--exit');
+        placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx % PLACEHOLDER_PHRASES.length];
+        startPlaceholderCycle();
+      } else {
+        stopPlaceholderCycle();
+      }
+    }
+
+    function startPlaceholderCycle() {
+      if (cycleTimer) return;
+      cycleTimer = window.setInterval(() => {
+        if (!wrapEl.classList.contains('search-input-wrap--faux-empty')) return;
+        placeEl.classList.add('search-placeholder-cycle--exit');
+        window.setTimeout(() => {
+          if (!wrapEl.classList.contains('search-input-wrap--faux-empty')) {
+            placeEl.classList.remove('search-placeholder-cycle--exit');
+            return;
+          }
+          phraseIdx = (phraseIdx + 1) % PLACEHOLDER_PHRASES.length;
+          placeEl.textContent = PLACEHOLDER_PHRASES[phraseIdx];
+          placeEl.classList.remove('search-placeholder-cycle--exit');
+        }, 450);
+      }, 4800);
+    }
+
+    function stopPlaceholderCycle() {
+      if (cycleTimer) {
+        window.clearInterval(cycleTimer);
+        cycleTimer = null;
+      }
+    }
+
+    function closeDropdown() {
       list.hidden = true;
+      list.innerHTML = '';
       card.classList.remove('search-card--open');
+      input.setAttribute('aria-expanded', 'false');
+      currentOrder = [];
+    }
+
+    function openEmpty() {
+      list.innerHTML =
+        `<li class="search-result search-result--empty" role="option">${escapeHtml(emptyMessage())}</li>`;
+      list.hidden = false;
+      card.classList.add('search-card--open');
       input.setAttribute('aria-expanded', 'false');
     }
 
     function sync() {
       const q = input.value;
-      const matches = filterPlaces(q);
-      currentMatches = matches;
-      input.setAttribute('aria-expanded', matches.length > 0 ? 'true' : 'false');
       if (!q.trim()) {
-        list.hidden = true;
-        list.innerHTML = '';
-        card.classList.remove('search-card--open');
+        closeDropdown();
         return;
       }
-      if (matches.length === 0) {
-        list.innerHTML =
-          `<li class="search-result search-result--empty" role="option">${escapeHtml(emptyMessage())}</li>`;
-        list.hidden = false;
-        card.classList.add('search-card--open');
+      const { tokens, matches } = search(q);
+      if (!matches.length) {
+        openEmpty();
+        currentOrder = [];
         return;
       }
-      list.innerHTML = matches.map((p, i) => renderResultRow(p, q, i)).join('');
+      const { html, order } = buildGroupedRows(matches, tokens);
+      list.innerHTML = html;
       list.hidden = false;
       card.classList.add('search-card--open');
+      input.setAttribute('aria-expanded', 'true');
+      currentOrder = order;
     }
 
-  /**
-   * onInput
-   *
-   * Purpose:
-   * Input handler: update results and placeholder state together.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Nothing.
-   */
-  function onInput() {
-    syncResults();
-    syncPlaceholderOverlay();
-  }
+    function selectItem(item) {
+      if (!item) return;
+      const mmap = window.MaristMap;
+      if (mmap && mmap.map && hasCoords(item)) {
+        mmap.map.flyTo({
+          center: [item.lon, item.lat],
+          zoom: Math.max(mmap.map.getZoom(), 18),
+          speed: 1.2,
+          essential: true,
+        });
+        new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: true,
+          maxWidth: '22rem',
+        })
+          .setLngLat([item.lon, item.lat])
+          .setHTML(
+            `<strong>${escapeHtml(item.name || '')}</strong>` +
+            `<div class="tag">${escapeHtml(item.subtitle || '')}</div>`
+          )
+          .addTo(mmap.map);
+      }
+      input.value = committedLabel(item);
+      closeDropdown();
+      input.blur();
+    }
 
-    list.addEventListener('click', (e) => {
-      const row = e.target.closest('.search-result');
-      if (!row) return;
-      const idx = Number(row.dataset.idx);
-      if (!Number.isFinite(idx)) return;
-      selectPlace(currentMatches[idx]);
+    // ---- events ----
+    input.addEventListener('input', () => { sync(); syncPlaceholderOverlay(); });
+    input.addEventListener('focus', () => { sync(); syncPlaceholderOverlay(); });
+    input.addEventListener('blur', () => {
+      // Tiny delay so a click on a result still registers before we hide.
+      setTimeout(syncPlaceholderOverlay, 0);
     });
-
-    input.addEventListener('input', () => { sync(); syncPlaceholder(); });
-    input.addEventListener('focus', () => { sync(); syncPlaceholder(); });
-    input.addEventListener('blur', syncPlaceholder);
-
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeDropdown();
         input.blur();
         return;
       }
-      if (e.key === 'Enter' && currentMatches.length) {
+      if (e.key === 'Enter' && currentOrder.length) {
         e.preventDefault();
-        selectPlace(currentMatches[0]);
+        selectItem(currentOrder[0]);
       }
     });
 
-    // Click outside the whole card → close dropdown.
+    list.addEventListener('mousedown', (e) => {
+      // mousedown (not click) so the input's `blur` handler doesn't fire
+      // first and close the dropdown before the click lands.
+      const row = e.target.closest('.search-result');
+      if (!row || row.classList.contains('search-result--empty')
+        || row.classList.contains('search-result--more')) return;
+      const idx = Number(row.dataset.idx);
+      if (!Number.isFinite(idx)) return;
+      e.preventDefault();
+      selectItem(currentOrder[idx]);
+    });
+
+    if (iconBtn) {
+      iconBtn.addEventListener('click', () => {
+        input.focus();
+        sync();
+      });
+    }
+
     document.addEventListener('click', (e) => {
       if (!card.contains(e.target)) closeDropdown();
     });
 
-    syncPlaceholder();
-
-    return { input, sync, syncPlaceholder };
+    return { input, sync, closeDropdown, syncPlaceholderOverlay };
   })();
 
   // ---- directions mode -------------------------------------------------
+  //
+  // One input per side. Each side holds a `committed` Item (or null).
+  // Rules:
+  //   - committed=null  → open autocomplete across all kinds (grouped).
+  //   - committed=a building that has rooms → SCOPED. We render a
+  //       "Hancock ✕" chip in the field and the input becomes a
+  //       narrow-filter that searches only rooms+entrances inside that
+  //       building. Clearing the chip (✕, backspace when empty, or the
+  //       field clear button) drops back to free state.
+  //   - committed=anything else (outdoor POI/path, room, entrance,
+  //       indoorless building) → input shows the label; typing clears
+  //       the commit and re-opens free search.
+  //
+  // The committed pick is also what drives routing: buildings with
+  // indoor data route via MaristIndoor as kind=building (best entrance);
+  // rooms/entrances route via MaristIndoor; everything else routes via
+  // MaristRoute with lon/lat.
 
   const directions = (() => {
     const pane = card.querySelector('[data-mode="directions"]');
-    const fromInput = document.getElementById('directions-from');
-    const toInput = document.getElementById('directions-to');
     const list = document.getElementById('directions-results');
     const summary = document.getElementById('directions-summary');
     const swapBtn = document.getElementById('directions-swap-btn');
     const gpxBtn = document.getElementById('directions-gpx-btn');
     const clearBtn = document.getElementById('directions-clear-btn');
-    const clearFromBtn = document.getElementById('directions-clear-from-btn');
-    const clearToBtn = document.getElementById('directions-clear-to-btn');
     const closeBtn = document.getElementById('directions-close-btn');
 
-    /** Which field is currently receiving autocomplete. */
-    let active = 'from';
+    function fieldFor(side) {
+      return {
+        field: document.querySelector(`.directions-field[data-side="${side}"]`),
+        input: document.getElementById(`directions-${side}`),
+        clear: document.getElementById(`directions-clear-${side}-btn`),
+        scope: document.getElementById(`directions-scope-${side}`),
+      };
+    }
+    const ui = { from: fieldFor('from'), to: fieldFor('to') };
 
-    /** The resolved feature selections, kept in sync with MaristRoute. */
+    /** Which field is receiving autocomplete right now. */
+    let active = 'from';
+    /** Final pick per side (what gets routed). */
     const selected = { from: null, to: null };
-    let currentMatches = [];
+    /** Rows currently rendered in the shared dropdown. */
+    let currentOrder = [];
+
+    const PLACEHOLDER_FREE = {
+      from: 'Choose starting point…',
+      to: 'Choose destination…',
+    };
+    const PLACEHOLDER_SCOPED = 'Room or entrance…';
 
     function setActive(which) {
       active = which;
-      pane.dataset.active = which;
+      if (pane) pane.dataset.active = which;
+    }
+    function otherSide(which) {
+      return which === 'from' ? 'to' : 'from';
+    }
+    function currentInput() {
+      return ui[active].input;
     }
 
-  /**
-   * closeDropdown
-   *
-   * Purpose:
-   * Hide the results list and clear aria-expanded for accessibility.
-   *
-   * Args:
-   * None.
-   *
-   * Returns:
-   * Nothing.
-   */
-  function closeDropdown() {
-    list.hidden = true;
-    card.classList.remove("search-card--open");
-    input.setAttribute("aria-expanded", "false");
-  }
+    // ---- scope helpers --------------------------------------------------
 
-  /**
-   * selectPlace
-   *
-   * Purpose:
-   * Fly the map to a feature, show a popup, sync input, and close the dropdown.
-   *
-   * Args:
-   * p - Selected feature with lon/lat and display fields (or null/undefined).
-   *
-   * Returns:
-   * Nothing.
-   */
-  function selectPlace(p) {
-    if (!p) return;
-    const mmap = window.MaristMap;
-    if (mmap && mmap.map && Number.isFinite(p.lon) && Number.isFinite(p.lat)) {
-      // flyTo lands smoothly even if we're already near the target.
-      mmap.map.flyTo({
-        center: [p.lon, p.lat],
-        zoom: Math.max(mmap.map.getZoom(), 18),
-        speed: 1.2,
-        essential: true,
-      });
-      new maplibregl.Popup({
-        closeButton: true,
-        closeOnClick: true,
-        maxWidth: "22rem",
-      })
-        .setLngLat([p.lon, p.lat])
-        .setHTML(
-          `<strong>${escapeHtml(p.name || "")}</strong>` +
-            `<div class="tag">${escapeHtml(p.subtitle || "")}</div>`,
-        )
-        .addTo(mmap.map);
+    function canScope(item) {
+      if (!item || item.kind !== 'building') return false;
+      const children = ROOMS_BY_BUILDING.get(buildingKey(item.name));
+      return !!(children && children.length);
     }
 
-    function pushSelection(which, place) {
-      selected[which] = place;
-      const input = which === 'from' ? fromInput : toInput;
-      input.value = place ? (place.name || '') : '';
-      if (!window.MaristRoute) return;
-      const pt = place
-        ? { lon: place.lon, lat: place.lat, label: place.name || null }
-        : null;
-      if (which === 'from') window.MaristRoute.setStart(pt);
-      else window.MaristRoute.setEnd(pt);
+    function isScoped(side) {
+      return canScope(selected[side]);
     }
 
-    function selectPlace(p) {
-      if (!p) return;
-      pushSelection(active, p);
+    function isIndoorCommit(item) {
+      if (!item) return false;
+      if (item.kind === 'room' || item.kind === 'entrance') return true;
+      if (item.kind === 'building' && ROOMS_BY_BUILDING.has(buildingKey(item.name))) {
+        return true;
+      }
+      return false;
+    }
+
+    // ---- UI refresh ----------------------------------------------------
+
+    function refreshFieldUI(side) {
+      const { input, scope } = ui[side];
+      const item = selected[side];
+      input.placeholder = PLACEHOLDER_FREE[side];
+      if (scope) {
+        scope.hidden = true;
+        const labelEl = scope.querySelector('.directions-scope__label');
+        if (labelEl) labelEl.textContent = '';
+      }
+      if (!item) {
+        input.value = '';
+        return;
+      }
+      if (canScope(item)) {
+        if (scope) {
+          scope.hidden = false;
+          const labelEl = scope.querySelector('.directions-scope__label');
+          if (labelEl) labelEl.textContent = item.name || '';
+        }
+        input.value = '';
+        input.placeholder = PLACEHOLDER_SCOPED;
+      } else {
+        input.value = committedLabel(item);
+      }
+    }
+
+    // ---- routing propagation -------------------------------------------
+
+    function pushToRouting(side, item) {
+      // Clear whichever leg isn't relevant first so the two state
+      // machines don't "double-commit" on the same side.
+      if (!item) {
+        if (window.MaristIndoor) window.MaristIndoor.setSide(side, null);
+        if (window.MaristRoute) {
+          if (side === 'from') window.MaristRoute.setStart(null);
+          else window.MaristRoute.setEnd(null);
+        }
+        return;
+      }
+      if (isIndoorCommit(item)) {
+        if (window.MaristRoute) {
+          if (side === 'from') window.MaristRoute.setStart(null);
+          else window.MaristRoute.setEnd(null);
+        }
+        if (window.MaristIndoor) {
+          // Hand setSide a real target when we have one (rooms /
+          // entrances come straight from list_targets). Buildings from
+          // /api/features build a bare endpoint — MaristIndoor's
+          // setSide will promote to a full target when available, or
+          // forward the bare payload otherwise.
+          const tgt = {
+            endpoint: item.endpoint
+              || { kind: 'building', building: item.building || item.name },
+            label: item.name,
+            kind: item.kind,
+            building: item.building || item.name,
+          };
+          window.MaristIndoor.setSide(side, tgt);
+        }
+        return;
+      }
+      if (window.MaristIndoor) window.MaristIndoor.setSide(side, null);
+      if (window.MaristRoute) {
+        const pt = { lon: item.lon, lat: item.lat, label: item.name || null };
+        if (side === 'from') window.MaristRoute.setStart(pt);
+        else window.MaristRoute.setEnd(pt);
+      }
+    }
+
+    function commit(side, item) {
+      selected[side] = item || null;
+      refreshFieldUI(side);
+      pushToRouting(side, item);
+    }
+
+    // Drop a non-scoping committed pick without touching the user's
+    // currently-typed input value. Used by the `input` handler: the
+    // user's keystroke is already sitting in input.value and we must
+    // not clear it the way commit(null) would.
+    function invalidateCommit(side) {
+      selected[side] = null;
+      const { scope } = ui[side];
+      if (scope) scope.hidden = true;
+      pushToRouting(side, null);
+    }
+
+    // ---- dropdown ------------------------------------------------------
+
+    function closeDropdown() {
+      if (!list) return;
+      list.hidden = true;
+      list.innerHTML = '';
+      currentOrder = [];
+    }
+
+    function renderMatches(matches, tokens, opts = {}) {
+      if (!list) return;
+      if (!matches.length) {
+        list.innerHTML =
+          `<li class="search-result search-result--empty" role="option">${escapeHtml(emptyMessage())}</li>`;
+        list.hidden = false;
+        currentOrder = [];
+        return;
+      }
+      const grouped = buildGroupedRows(matches, tokens, opts);
+      list.innerHTML = grouped.html;
+      list.hidden = false;
+      currentOrder = grouped.order;
+    }
+
+    function syncScoped() {
+      const { input } = ui[active];
+      const building = selected[active];
+      const key = buildingKey(building.name);
+      const rooms = ROOMS_BY_BUILDING.get(key) || [];
+      const tokens = tokenize(input.value);
+      let matches;
+      if (!tokens.length) {
+        // Empty scoped query: browse mode. Show the whole room list.
+        matches = rooms.slice(0, 80);
+      } else {
+        const scored = [];
+        for (const r of rooms) {
+          const s = scoreItem(r, tokens);
+          if (s > 0) scored.push({ r, s });
+        }
+        // Also include matching entrances for the same building, since
+        // they're valid route endpoints too and there aren't many.
+        for (const it of ITEMS) {
+          if (it.kind !== 'entrance') continue;
+          if (buildingKey(it.building) !== key) continue;
+          const s = scoreItem(it, tokens);
+          if (s > 0) scored.push({ r: it, s });
+        }
+        scored.sort((a, b) =>
+          b.s - a.s
+          || (a.r.name || '').localeCompare(b.r.name || '')
+        );
+        matches = scored.slice(0, 40).map((x) => x.r);
+      }
+      renderMatches(matches, tokens, { childrenMax: 0 });
+    }
+
+    function syncFree() {
+      const q = ui[active].input.value;
+      if (!q.trim()) {
+        closeDropdown();
+        return;
+      }
+      const { tokens, matches } = search(q);
+      renderMatches(matches, tokens);
+    }
+
+    function sync() {
+      if (isScoped(active)) syncScoped();
+      else syncFree();
+    }
+
+    // ---- selection -----------------------------------------------------
+
+    function pick(item) {
+      if (!item) return;
+      const side = active;
+      // If the user picked the scoped building from within its own
+      // dropdown (shouldn't normally appear, but just in case), treat
+      // it as a no-op.
+      if (isScoped(side) && item.id === selected[side].id) {
+        closeDropdown();
+        return;
+      }
+      if (canScope(item)) {
+        // Enter scope: keep focus here so the user can type a room.
+        commit(side, item);
+        closeDropdown();
+        ui[side].input.focus();
+        sync();
+        return;
+      }
+      commit(side, item);
       closeDropdown();
-      // If the other field is empty, advance focus there. If both now
-      // have values, blur so the route is the main thing the user sees.
-      const other = active === 'from' ? 'to' : 'from';
+      // Advance to the other side if empty; otherwise blur so the map
+      // route is the thing in focus.
+      const other = otherSide(side);
       if (!selected[other]) {
         setActive(other);
         currentInput().focus();
       } else {
-        currentInput().blur();
+        ui[side].input.blur();
       }
     }
 
-    list.addEventListener('click', (e) => {
-      const row = e.target.closest('.search-result');
-      if (!row) return;
-      const idx = Number(row.dataset.idx);
-      if (!Number.isFinite(idx)) return;
-      selectPlace(currentMatches[idx]);
-    });
+    // ---- event wiring --------------------------------------------------
 
-    function bindField(which) {
-      const input = which === 'from' ? fromInput : toInput;
-      input.addEventListener('focus', () => { setActive(which); sync(); });
+    function bindField(side) {
+      const { input, clear, scope } = ui[side];
+
+      input.addEventListener('focus', () => {
+        setActive(side);
+        sync();
+      });
       input.addEventListener('input', () => {
-        setActive(which);
-        // Typing in a field invalidates the previous confirmed selection
-        // for that field — but don't fire the route until the user picks
-        // a new one, else every keystroke would clear the drawn line.
-        selected[which] = null;
+        setActive(side);
+        // Typing after a non-scope commit invalidates it so the
+        // dropdown opens on the typed query, not on the stale label.
+        // Scoped commits stay — typing narrows rather than invalidates.
+        if (selected[side] && !isScoped(side)) {
+          invalidateCommit(side);
+        }
         sync();
       });
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && currentMatches.length) {
-          e.preventDefault();
-          selectPlace(currentMatches[0]);
+        if (e.key === 'Enter') {
+          if (currentOrder.length) {
+            e.preventDefault();
+            pick(currentOrder[0]);
+          }
           return;
         }
         if (e.key === 'Escape') {
           closeDropdown();
           input.blur();
+          return;
+        }
+        if (e.key === 'Backspace' && isScoped(side) && input.value === '') {
+          // Drop the scope chip when the user backspaces into it.
+          e.preventDefault();
+          commit(side, null);
+          sync();
         }
       });
+
+      if (scope) {
+        const chipClear = scope.querySelector('.directions-scope__clear');
+        if (chipClear) {
+          // mousedown so the input doesn't blur-and-close first.
+          chipClear.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            setActive(side);
+            commit(side, null);
+            input.focus();
+            sync();
+          });
+        }
+      }
+
+      if (clear) {
+        clear.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          setActive(side);
+          commit(side, null);
+          input.focus();
+          closeDropdown();
+        });
+      }
     }
+
     bindField('from');
     bindField('to');
+
+    if (list) {
+      list.addEventListener('mousedown', (e) => {
+        const row = e.target.closest('.search-result');
+        if (!row || row.classList.contains('search-result--empty')
+          || row.classList.contains('search-result--more')) return;
+        const idx = Number(row.dataset.idx);
+        if (!Number.isFinite(idx)) return;
+        e.preventDefault();
+        pick(currentOrder[idx]);
+      });
+    }
 
     document.addEventListener('click', (e) => {
       if (!card.contains(e.target)) closeDropdown();
     });
 
-    // ---- endpoint clears ----
-    clearFromBtn && clearFromBtn.addEventListener('click', () => {
-      pushSelection('from', null);
-      setActive('from');
-      fromInput.focus();
-      closeDropdown();
-    });
-    clearToBtn && clearToBtn.addEventListener('click', () => {
-      pushSelection('to', null);
-      setActive('to');
-      toInput.focus();
-      closeDropdown();
-    });
+    // ---- overall actions -----------------------------------------------
 
-    // ---- overall actions ----
-    swapBtn.addEventListener('click', () => {
-      if (!window.MaristRoute) return;
-      [selected.from, selected.to] = [selected.to, selected.from];
-      fromInput.value = selected.from ? (selected.from.name || '') : '';
-      toInput.value = selected.to ? (selected.to.name || '') : '';
-      window.MaristRoute.swap();
-    });
-    clearBtn && clearBtn.addEventListener('click', () => {
-      selected.from = null;
-      selected.to = null;
-      fromInput.value = '';
-      toInput.value = '';
-      closeDropdown();
-      if (window.MaristRoute) window.MaristRoute.clear();
-      setActive('from');
-      fromInput.focus();
-    });
-    gpxBtn.addEventListener('click', () => {
-      if (window.MaristRoute) window.MaristRoute.exportGpx();
-    });
-    closeBtn.addEventListener('click', () => {
-      setMode('single');
-    });
+    if (swapBtn) {
+      swapBtn.addEventListener('click', () => {
+        const a = selected.from, b = selected.to;
+        selected.from = b;
+        selected.to = a;
+        refreshFieldUI('from');
+        refreshFieldUI('to');
+        pushToRouting('from', selected.from);
+        pushToRouting('to', selected.to);
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        commit('from', null);
+        commit('to', null);
+        closeDropdown();
+        if (window.MaristRoute) window.MaristRoute.clear();
+        setActive('from');
+        ui.from.input.focus();
+      });
+    }
+    if (gpxBtn) {
+      gpxBtn.addEventListener('click', () => {
+        if (window.MaristRoute) window.MaristRoute.exportGpx();
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => setMode('single'));
+    }
 
-    // ---- react to route state changes (event from routing.js) ----
+    // ---- react to route state changes (event from routing.js) ----------
+
     document.addEventListener('mmap:route-changed', (ev) => {
       const detail = ev.detail || {};
 
-      // Anyone (e.g. the right-click context menu, or a future "directions
-      // to here" popup button) can call MaristRoute.setStart/setEnd. When
-      // they do while we're in single-search mode, flip into directions
-      // mode so the user sees the synchronized From/To fields and the
-      // summary/Export controls instead of just a line on the map.
+      // An external source (e.g. the right-click "directions from here"
+      // menu) can call MaristRoute.setStart/setEnd directly. When that
+      // happens while we're in single mode, flip into directions.
       const hasAnyEndpoint = !!(detail.from || detail.to);
       if (hasAnyEndpoint && card.dataset.mode !== 'directions') {
-        setMode('directions');
+        setMode('directions', { focus: false });
       }
 
-      // Don't clobber in-progress typing if an input has focus and the
-      // user hasn't yet confirmed a selection for that field.
-      const activeEl = document.activeElement;
-
-      // Keep input text aligned with the route's labels when the user
-      // isn't actively typing.
-      if (detail.from && activeEl !== fromInput) {
-        fromInput.value = detail.from.label || fromInput.value || `${detail.from.lat.toFixed(5)}, ${detail.from.lon.toFixed(5)}`;
-      }
-      if (!detail.from && activeEl !== fromInput) {
-        fromInput.value = '';
-      }
-      if (detail.to && activeEl !== toInput) {
-        toInput.value = detail.to.label || toInput.value || `${detail.to.lat.toFixed(5)}, ${detail.to.lon.toFixed(5)}`;
-      }
-      if (!detail.to && activeEl !== toInput) {
-        toInput.value = '';
+      // If routing.js got an outdoor endpoint we didn't already know
+      // about (right-click menu path), synthesize a minimal Item so the
+      // field shows the right label.
+      for (const side of ['from', 'to']) {
+        const ep = detail[side];
+        if (!ep) {
+          // Only clear UI if we hadn't set an indoor-only commit on
+          // this side. Otherwise detail[side] reflects outdoor-only
+          // state and we shouldn't wipe the chip.
+          if (selected[side] && !isIndoorCommit(selected[side])) {
+            selected[side] = null;
+            refreshFieldUI(side);
+          }
+          continue;
+        }
+        if (!selected[side] || (
+          !isIndoorCommit(selected[side])
+          && (selected[side].lon !== ep.lon || selected[side].lat !== ep.lat)
+        )) {
+          selected[side] = {
+            id: `ext/${side}/${ep.lat.toFixed(6)},${ep.lon.toFixed(6)}`,
+            kind: 'poi',
+            name: ep.label || `${ep.lat.toFixed(5)}, ${ep.lon.toFixed(5)}`,
+            subtitle: 'Pinned location',
+            lon: ep.lon,
+            lat: ep.lat,
+            tokens: [],
+            endpoint: null,
+          };
+          refreshFieldUI(side);
+        }
       }
 
       // Summary + button states.
-      swapBtn.disabled = !(detail.from && detail.to);
-      gpxBtn.disabled = !detail.route;
+      if (swapBtn) swapBtn.disabled = !(selected.from && selected.to);
+      if (gpxBtn) gpxBtn.disabled = !detail.route;
+      if (!summary) return;
       if (detail.status === 'loading') {
         summary.hidden = false;
         summary.textContent = 'Routing…';
@@ -733,40 +1031,40 @@
       }
     });
 
+    // Initial placeholders so the fields read correctly on first paint.
+    refreshFieldUI('from');
+    refreshFieldUI('to');
+
     return {
-      fromInput, toInput,
+      get fromInput() { return ui.from.input; },
+      get toInput() { return ui.to.input; },
+      firstEmptySide() { return selected.from ? 'to' : 'from'; },
       sync,
-      setActive,
+      closeDropdown,
     };
   })();
-
-  function isDirectionsMode() {
-    return card.dataset.mode === 'directions';
-  }
 
   // ---- mode toggle buttons --------------------------------------------
 
   const enterBtn = document.getElementById('directions-enter-btn');
   if (enterBtn) enterBtn.addEventListener('click', () => setMode('directions'));
 
-  // The HTML already starts with data-mode="single"; re-assert the
-  // state without focusing so we don't steal focus from the map on load.
+  // The HTML starts with data-mode="single"; re-assert without stealing
+  // focus from the map on load.
   setMode('single', { focus: false });
 
-  // ---- formatting ------------------------------------------------------
+  // ---- kick off data load ----------------------------------------------
 
-  function fmtDistance(m) {
-    if (!Number.isFinite(m)) return '';
-    if (m < 1000) return `${Math.round(m)} m`;
-    return `${(m / 1000).toFixed(2)} km`;
-  }
+  loadData().catch((err) => {
+    dataError = err;
+    console.warn('[search] data load failed:', err);
+    if (single.input.value.trim()) single.sync();
+  });
 
-  function fmtDuration(s) {
-    if (!Number.isFinite(s)) return '';
-    const mins = Math.max(1, Math.round(s / 60));
-    if (mins < 60) return `${mins} min walk`;
-    const h = Math.floor(mins / 60);
-    const r = mins % 60;
-    return r ? `${h} h ${r} min walk` : `${h} h walk`;
-  }
+  // Optional external hook for other modules that want the full place
+  // list (e.g. a future "snap to named place" feature).
+  window.MaristSearch = {
+    get items() { return ITEMS.slice(); },
+    search,
+  };
 })();

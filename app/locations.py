@@ -185,11 +185,14 @@ def list_targets() -> list[dict]:
     for name in sorted(buildings_seen, key=str.lower):
         entrances = entrances_for(name)
         sub = f"Building · {len(entrances)} entrance{'s' if len(entrances) != 1 else ''}"
+        rep = entrances[0] if entrances else buildings_seen[name]
         targets.append({
             "kind": "building",
             "label": name,
             "sublabel": sub,
             "building": name,
+            "lon": rep.lon,
+            "lat": rep.lat,
             "tokens": [name.lower()] + name.lower().split(),
             "endpoint": {"kind": "building", "building": name},
         })
@@ -207,6 +210,8 @@ def list_targets() -> list[dict]:
             "building": e.building,
             "room": e.room,
             "floor": e.floor,
+            "lon": e.lon,
+            "lat": e.lat,
             "tokens": tokens,
             "endpoint": {"kind": "room", "building": e.building, "room": e.room},
         })
@@ -224,6 +229,8 @@ def list_targets() -> list[dict]:
             "sublabel": f"{e.building} · Entrance",
             "building": e.building,
             "room": e.room,
+            "lon": e.lon,
+            "lat": e.lat,
             "tokens": tokens,
             "endpoint": {"kind": "entrance", "building": e.building, "name": e.room},
         })
