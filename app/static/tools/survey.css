@@ -1,0 +1,348 @@
+/* GeoLog surveying tool — styles.
+ *
+ * Originally paired with Leaflet; now used with MapLibre. Additions at
+ * the bottom handle DOM-based markers (pin, logged entries, GPS accuracy
+ * ring) since MapLibre's Marker takes an HTMLElement rather than the
+ * icon-factory pattern Leaflet used. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+html { height: 100%; }
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: #111;
+  color: #ddd;
+  font-size: 15px;
+  min-height: 100dvh;
+  max-width: 500px;
+  margin: 0 auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #222;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: #111;
+  z-index: 1000;
+}
+
+.title { font-size: 16px; font-weight: 600; color: #eee; }
+.title .session { font-weight: 400; color: #666; margin-left: 2px; }
+.gps-status { font-size: 12px; color: #555; }
+.gps-status.on { color: #5a5; }
+.gps-status.err { color: #a55; }
+
+main { padding: 0; }
+
+/* Idle */
+.idle { padding: 60px 20px; text-align: center; }
+.idle p { color: #666; font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+.session-input {
+  width: 100%; padding: 14px 16px;
+  font-size: 16px; text-align: center;
+  background: #1a1a1a; border: none; border-radius: 8px;
+  color: #ddd; font-family: inherit; outline: none;
+  margin-bottom: 12px;
+}
+.session-input::placeholder { color: #444; }
+.session-input:focus { background: #1e1e1e; }
+.start-btn {
+  width: 100%; padding: 16px;
+  font-size: 16px; font-weight: 500;
+  background: #eee; color: #111;
+  border: none; border-radius: 8px;
+  font-family: inherit; cursor: pointer;
+}
+.start-btn:active { background: #ccc; }
+.export-prev {
+  width: 100%; padding: 14px;
+  font-size: 14px; margin-top: 10px;
+  background: none; color: #666;
+  border: 1px solid #333; border-radius: 8px;
+  font-family: inherit; cursor: pointer;
+}
+.export-prev:active { background: #1a1a1a; }
+
+/* Map */
+.map-wrap {
+  width: 100%; height: 220px;
+  position: relative;
+  border-bottom: 1px solid #222;
+}
+#map { height: 100%; width: 100%; background: #1a1a1a; }
+
+.map-hint {
+  position: absolute;
+  bottom: 8px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 800;
+  font-size: 11px; color: #999;
+  background: rgba(17, 17, 17, 0.85);
+  padding: 4px 10px; border-radius: 4px;
+  pointer-events: none;
+}
+.recenter-btn {
+  position: absolute;
+  top: 10px; right: 10px;
+  z-index: 800;
+  padding: 8px 12px;
+  font-size: 12px; font-weight: 500;
+  background: rgba(17, 17, 17, 0.85);
+  color: #aaa;
+  border: 1px solid #333; border-radius: 6px;
+  font-family: inherit; cursor: pointer;
+}
+.recenter-btn:active { background: #222; }
+
+/* Coords readout */
+.coords-bar {
+  padding: 10px 20px;
+  border-bottom: 1px solid #1e1e1e;
+  display: flex; gap: 20px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.coords-bar span { color: #888; }
+.coords-bar .val { color: #ccc; font-weight: 500; }
+
+/* Panel below map */
+.panel { padding: 16px 20px 40px; }
+
+/* Fields */
+.field-group { margin-bottom: 14px; }
+.field-row {
+  display: flex; align-items: center;
+  gap: 10px; margin-bottom: 8px;
+}
+.field-row label {
+  font-size: 11px; color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-width: 44px; flex-shrink: 0;
+}
+.field-row input {
+  flex: 1; padding: 12px 14px;
+  font-size: 15px;
+  background: #1a1a1a; border: none; border-radius: 8px;
+  color: #ccc; font-family: inherit; outline: none;
+}
+.field-row input::placeholder { color: #444; }
+.field-row input:focus { background: #1e1e1e; }
+.field-row input.locked { background: #162016; color: #6a6; }
+.field-row input:disabled { opacity: 1; }
+.field-row select {
+  flex: 1; padding: 12px 14px;
+  font-size: 15px;
+  background: #1a1a1a; border: none; border-radius: 8px;
+  color: #ccc; font-family: inherit; outline: none;
+}
+.field-row select:focus { background: #1e1e1e; }
+.edit-btn {
+  padding: 10px 14px;
+  font-size: 13px;
+  background: #1a1a1a; border: none; border-radius: 8px;
+  color: #666; font-family: inherit; cursor: pointer;
+}
+.edit-btn:active { background: #222; }
+
+/* Room */
+.room-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.room-row input {
+  flex: 1; padding: 14px 16px;
+  font-size: 16px;
+  background: #1a1a1a; border: none; border-radius: 8px;
+  color: #ddd; font-family: inherit; outline: none;
+}
+.room-row input::placeholder { color: #444; }
+.room-row input:focus { background: #1e1e1e; }
+.log-btn {
+  padding: 14px 24px;
+  font-size: 15px; font-weight: 600;
+  background: #eee; color: #111;
+  border: none; border-radius: 8px;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+}
+.log-btn:active { background: #ccc; }
+.log-btn:disabled { opacity: 0.15; }
+.log-btn.log-wide { width: 100%; margin-bottom: 12px; }
+
+/* Log mode */
+.log-mode-row { display: flex; gap: 6px; margin-bottom: 12px; }
+.log-mode-btn {
+  flex: 1; padding: 10px 8px;
+  font-size: 12px; font-weight: 500;
+  background: #1a1a1a; color: #666;
+  border: 1px solid #2a2a2a; border-radius: 8px;
+  font-family: inherit; cursor: pointer;
+}
+.log-mode-btn.active {
+  background: #252525; color: #ccc; border-color: #444;
+}
+.log-block.hidden { display: none; }
+
+.connector-kind-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.ck-btn {
+  flex: 1; padding: 12px;
+  font-size: 14px; font-weight: 500;
+  background: #1a1a1a; color: #777;
+  border: 1px solid #2a2a2a; border-radius: 8px;
+  font-family: inherit; cursor: pointer;
+}
+.ck-btn.active {
+  background: #2a2520; color: #daa520; border-color: #554530;
+}
+#ck-elev.active {
+  background: #1a222a; color: #6af; border-color: #304555;
+}
+
+.room-row-fill input { width: 100%; }
+
+.closest-row {
+  display: flex; flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  font-size: 12px; color: #666;
+  margin-bottom: 14px; line-height: 1.4;
+}
+.closest-row > span:first-child {
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+.closest-preview-val { color: #8a8; font-weight: 500; }
+.closest-preview-val.muted { color: #555; font-weight: 400; }
+
+/* Notes */
+.notes-tog {
+  font-size: 13px; color: #444;
+  background: none; border: none;
+  font-family: inherit; cursor: pointer;
+  padding: 2px 0; margin-bottom: 8px;
+}
+.notes-tog.on { color: #777; }
+textarea.notes {
+  width: 100%; padding: 12px 14px;
+  font-size: 14px;
+  background: #1a1a1a; border: none; border-radius: 8px;
+  color: #999; font-family: inherit; outline: none;
+  resize: none; min-height: 48px;
+  margin-bottom: 16px;
+}
+textarea.notes::placeholder { color: #333; }
+textarea.notes:focus { background: #1e1e1e; }
+.hidden { display: none; }
+
+/* Toolbar */
+.toolbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; margin-bottom: 8px;
+  border-top: 1px solid #1e1e1e;
+}
+.toolbar-ct { font-size: 13px; color: #555; }
+.toolbar-acts { display: flex; gap: 8px; }
+.toolbar-acts button {
+  padding: 8px 14px;
+  font-size: 12px; font-weight: 500;
+  border-radius: 6px; border: none;
+  font-family: inherit; cursor: pointer;
+}
+.exp-btn { background: #1a261a; color: #6a6; }
+.exp-btn:active { background: #223022; }
+.end-btn { background: #261a1a; color: #a66; }
+.end-btn:active { background: #302020; }
+
+/* Entries */
+.entries { display: flex; flex-direction: column; }
+.entry { padding: 14px 0; border-bottom: 1px solid #1a1a1a; }
+.entry:last-child { border-bottom: none; }
+.entry-top { display: flex; align-items: flex-start; gap: 12px; }
+.entry-num {
+  min-width: 24px;
+  font-size: 12px; color: #444;
+  padding-top: 2px; text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.entry-body { flex: 1; min-width: 0; }
+.entry-kind {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: #555; margin-bottom: 2px;
+}
+.entry-name { font-size: 14px; font-weight: 500; color: #ccc; }
+.entry-extra {
+  font-size: 12px; color: #6a7;
+  margin-top: 4px; line-height: 1.35;
+}
+.entry-sub {
+  font-size: 12px; color: #555;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.entry-aside { flex-shrink: 0; text-align: right; }
+.entry-time { font-size: 11px; color: #333; }
+.entry-del {
+  background: none; border: none;
+  color: #333; font-size: 12px;
+  font-family: inherit; cursor: pointer;
+  padding: 4px 0; display: block;
+  margin-top: 2px;
+}
+.entry-del:active { color: #a55; }
+.entry-notes {
+  margin-top: 4px; padding-left: 36px;
+  font-size: 13px; color: #555;
+  line-height: 1.5;
+}
+.empty {
+  text-align: center; padding: 40px 0;
+  color: #333; font-size: 13px;
+}
+
+/* ── MapLibre markers (DOM-based) ──────────────────────────────────
+ *
+ * MapLibre's Marker wraps an HTMLElement; each marker below uses one of
+ * these wrappers with an inline SVG child. Sizes match the original
+ * Leaflet divIcons so hit targets stay consistent. */
+
+.mm-pin {
+  width: 28px; height: 40px;
+  cursor: grab;
+  pointer-events: auto;
+}
+.mm-pin:active { cursor: grabbing; }
+.mm-pin svg { display: block; pointer-events: none; }
+
+.mm-logged {
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.mm-logged--room { width: 14px; height: 14px; }
+.mm-logged svg { display: block; }
+
+/* GPS accuracy ring. Sized each frame by JS (width/height = 2*radius in
+   screen px). Blue fill echoes the old Leaflet L.circle styling. */
+.mm-gps-ring {
+  border-radius: 50%;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.7);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* The Martin OSM style is dark; drop the default white Marker shadow so
+   our SVG reads cleanly against it. */
+.maplibregl-marker { filter: none; }

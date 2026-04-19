@@ -89,19 +89,81 @@ def map_only():
 
 
 # ---------------------------------------------------------------------------
-# Features
+# Tools (internal — surveying + CSV editor)
+# ---------------------------------------------------------------------------
+#
+# Both pages read the same _map_page_config() blob as the main map so the
+# Martin URL, campus center, and zoom stay in sync across every
+# map-rendering surface. Tools are not linked from the public header;
+# they're reachable by direct URL only.
+
+
+@bp.route("/tools/survey")
+def tools_survey():
+    """Field surveying tool — mobile GPS logger that emits CSVs matching
+    the edit tool's expected schema."""
+    return render_template("tools/survey.html", map_config=_map_page_config())
+
+
+@bp.route("/tools/edit")
+def tools_edit():
+    """Desktop CSV editor — the old csv_viz.html tool, now rendered
+    against Martin OSM tiles and wired through Flask so the Martin URL
+    comes from the server config instead of localStorage."""
+    return render_template("tools/edit.html", map_config=_map_page_config())
+
+
+# ---------------------------------------------------------------------------
+# Features (unchanged)
 # ---------------------------------------------------------------------------
 
 
 @bp.route("/api/features")
 def api_features():
-    features: list[dict] = []
-    for f in load_osm_buildings():
-        features.append(feature_to_search_dict(f))
-    for f in load_osm_pois():
-        features.append(feature_to_search_dict(f))
-    for f in load_osm_paths():
-        features.append(feature_to_search_dict(f))
+    features = []
+    for row in _safe_rows(_BUILDINGS_SQL):
+        lon, lat = row["lon"], row["lat"]
+        if lon is None or lat is None:
+            continue
+        features.append({
+            "id": f"way/{row['osm_id']}", "osm_id": row["osm_id"],
+            "kind": "building", "name": row["name"],
+            "subtitle": _building_subtitle(row),
+            "lon": float(lon), "lat": float(lat),
+        })
+    for row in _safe_rows(_POIS_SQL):
+        lon, lat = row["lon"], row["lat"]
+        if lon is None or lat is None:
+            continue
+        features.append({
+            "id": f"node/{row['osm_id']}", "osm_id": row["osm_id"],
+            "kind": "poi", "name": row["name"],
+            "subtitle": _poi_subtitle(row),
+            "lon": float(lon), "lat": float(lat),
+        })
+    seen_path_names = set()
+    for row in _safe_rows(_PATHS_SQL, {"path_kinds": _PATH_KINDS_PARAM}):
+        name = row["name"]
+        if name in seen_path_names:
+            continue
+        lon, lat = row["lon"], row["lat"]
+        if lon is None or lat is None:
+            continue
+        seen_path_names.add(name)
+        features.append(
+            {
+                "id": f"way/{row['osm_id']}",
+                "osm_id": row["osm_id"],
+                "kind": "path",
+                "name": name,
+                "subtitle": _path_subtitle(row),
+                "lon": float(lon),
+                "lat": float(lat),
+            }
+        )
+
+    _apply_building_name_overrides(features)
+
     features.sort(key=lambda f: (f["kind"], (f["name"] or "").lower()))
     return jsonify({"features": features, "count": len(features)})
 

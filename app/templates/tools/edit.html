@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>maristmaps viz — editor</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='tools/edit.css') }}">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+</head>
+<body>
+<header>
+  <div class="title">maristmaps viz</div>
+  <input type="file" id="files" multiple accept=".csv">
+  <select id="f-bldg"><option value="">all buildings</option></select>
+  <select id="f-floor"><option value="">all floors</option></select>
+  <span id="count"></span>
+  <button id="toggle-add">+ add point</button>
+  <button id="toggle-edit">✎ edit</button>
+  <button id="toggle-route">🧭 route</button>
+  <button id="toggle-hallway">🔗 hallway</button>
+  <label class="pref-toggle">
+    <input type="checkbox" id="prefer-elevator">
+    prefer elevator
+  </label>
+  <button id="dl" style="display:none">download CSVs</button>
+  <span class="hint" id="hint">hover a node to see its closest links</span>
+</header>
+<div id="map"></div>
+
+<div id="legend">
+  <div class="item"><span class="sym" id="leg-room"></span>Room</div>
+  <div class="item"><span class="sym" id="leg-entrance"></span>Entrance</div>
+  <div class="item"><span class="sym" id="leg-stairs"></span>Stairs</div>
+  <div class="item"><span class="sym" id="leg-elevator"></span>Elevator</div>
+  <div class="item"><span class="sym" id="leg-hallway"></span>Hallway</div>
+</div>
+
+<div id="info"></div>
+
+<div id="panel">
+  <div class="panel-hd">
+    <span class="t" id="panel-title">Add point</span>
+    <button id="panel-close">&times;</button>
+  </div>
+  <div class="kind-row">
+    <button class="kind-btn active" data-k="room">Room</button>
+    <button class="kind-btn" data-k="entrance">Entrance</button>
+    <button class="kind-btn" data-k="stairs">Stairs</button>
+    <button class="kind-btn" data-k="elevator">Elevator</button>
+  </div>
+  <div class="field">
+    <label>Building</label>
+    <input id="d-bldg" list="bldg-list" placeholder="e.g. Dyson">
+    <datalist id="bldg-list"></datalist>
+  </div>
+  <div class="field">
+    <label>Floor</label>
+    <input id="d-floor" placeholder="e.g. 2, or 1-4 for connectors">
+  </div>
+  <div class="field" id="f-name">
+    <label id="name-lbl">Room number</label>
+    <input id="d-name" placeholder="e.g. 2016">
+  </div>
+  <div class="field hidden" id="f-ori">
+    <label>Building face</label>
+    <select id="d-ori">
+      <option>N</option><option>NE</option><option>E</option><option>SE</option>
+      <option>S</option><option>SW</option><option>W</option><option>NW</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Location</label>
+    <div class="field-pair">
+      <input id="d-lat" placeholder="latitude" inputmode="decimal">
+      <input id="d-lng" placeholder="longitude" inputmode="decimal">
+    </div>
+    <div class="field-hint" id="loc-hint">click the map to set a location</div>
+  </div>
+  <div class="field">
+    <label>Notes (optional)</label>
+    <input id="d-notes">
+  </div>
+  <button class="btn-primary" id="d-primary">Add point</button>
+  <button class="btn-danger hidden" id="d-delete">Delete this point</button>
+</div>
+
+<div id="route-panel">
+  <div class="panel-hd">
+    <span class="t">Route</span>
+    <button id="route-close">&times;</button>
+  </div>
+  <div class="route-slot start">
+    <span class="lbl">Start</span>
+    <span class="val empty" id="route-start-val">click a marker</span>
+    <button class="hidden" id="route-start-clear">&times;</button>
+  </div>
+  <div class="route-slot end">
+    <span class="lbl">End</span>
+    <span class="val empty" id="route-end-val">click a marker</span>
+    <button class="hidden" id="route-end-clear">&times;</button>
+  </div>
+  <div class="route-info" id="route-info">
+    <span class="empty">pick two points to compute a route</span>
+  </div>
+</div>
+
+<div id="hallway-panel">
+  <div class="panel-hd">
+    <span class="t">Hallway drawing</span>
+    <button id="hallway-close">&times;</button>
+  </div>
+  <div id="hall-body">
+    <div class="hall-row">
+      <label>Building</label>
+      <div class="readout" id="hall-bldg">—</div>
+    </div>
+    <div class="hall-row">
+      <label>Floor</label>
+      <select id="hall-floor"><option value="*">* all floors</option></select>
+    </div>
+    <div class="hall-status" id="hall-status">
+      <span class="none">click the map to drop the first node</span>
+    </div>
+    <div class="hall-help">
+      <strong>click map</strong> — drop node, connect to last<br>
+      <strong>click existing node</strong> — select as last<br>
+      <strong>shift+click existing</strong> — connect last → this
+    </div>
+    <div class="hall-btn-row">
+      <button id="hall-new-seg">new segment</button>
+      <button id="hall-del-last">delete last</button>
+    </div>
+  </div>
+</div>
+
+{# Injected by main.tools_edit — read by edit.js on load. Same shape as
+   the main map page (martinBase/center/zoom) so one config source
+   powers every map-rendering page. #}
+<script type="application/json" id="map-config">{{ map_config | tojson }}</script>
+<script src="{{ url_for('static', filename='tools/edit.js') }}" defer></script>
+</body>
+</html>
