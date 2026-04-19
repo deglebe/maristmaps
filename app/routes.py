@@ -8,7 +8,7 @@ from openai import BadRequestError
 
 from agent.logutil import get_logger, trunc_preview
 from agent.service import looks_like_question, run_agent_turn_b64, speech_to_text
-from app import routing, trip
+from app import routing, trip, building_bridges
 from app.locations import (
     find_entrance,
     find_room,
@@ -320,6 +320,7 @@ def api_route_rebuild():
     routing.reset_graph_cache()
     reset_locations_cache()
     reset_osm_cache()
+    building_bridges.reset_bridges_cache()
     return jsonify({"ok": True})
 
 

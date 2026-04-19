@@ -870,6 +870,19 @@ def route_entrance_to_room(
         start_mode="entrance_enter", end_mode="room",
     )
 
+def route_entrance_to_entrance(
+    start_entrance: LocationRow,
+    end_entrance: LocationRow,
+    locations: list[LocationRow],
+    *,
+    prefer_elevator: bool = False,
+) -> RoutePhase:
+    """Enter building at one entrance, exit at another.
+    """
+    return _route_indoor(
+        start_entrance, end_entrance, locations, prefer_elevator,
+        start_mode="entrance_enter", end_mode="entrance_exit",
+    )
 
 # --- json serialization ------------------------------------------------------
 
