@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from flask import Blueprint, Response, abort, jsonify, render_template, request, session
+from flask import Blueprint, Response, abort, current_app, jsonify, render_template, request, send_from_directory, session
 from langchain_core.messages import SystemMessage, message_to_dict, messages_from_dict
 from openai import BadRequestError
 
@@ -81,6 +81,18 @@ def _map_page_config():
 @bp.route("/")
 def index():
     return render_template("index.html", map_config=_map_page_config())
+
+
+@bp.route("/favicon.ico")
+def favicon():
+    """Serve /favicon.ico from static/. Browsers + bots still request
+    this at the site root regardless of what the <link rel="icon">
+    tags say, so give them a real file instead of a 404."""
+    return send_from_directory(
+        current_app.static_folder,
+        "favicon.ico",
+        mimetype="image/vnd.microsoft.icon",
+    )
 
 
 @bp.route("/map")
