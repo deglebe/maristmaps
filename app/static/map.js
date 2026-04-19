@@ -968,6 +968,12 @@
    * Returns:
    * HTML string passed to Popup#setHTML.
    */
+  const directionsButtonHtml = () => (
+    `<div class="popup-actions">` +
+    `  <button type="button" class="popup-action popup-action--to" data-action="directions">Directions</button>` +
+    `</div>`
+  );
+
   const popupHtml = (feature) => {
     const raw = feature.properties || {};
     const isBuilding = feature.layer && feature.layer.id === "buildings";
@@ -986,7 +992,10 @@
       const body = inner
         ? `<table class="attrs">${inner}</table>`
         : '<div class="tag">No extra details</div>';
-      return `<strong>${escapeHtml(title)}</strong>${body}`;
+      return {
+        title,
+        html: `<strong>${escapeHtml(title)}</strong>${body}${directionsButtonHtml()}`,
+      };
     }
 
     const title =
@@ -1004,7 +1013,10 @@
     const body = rows
       ? `<table class="attrs">${rows}</table>`
       : '<div class="tag">No tagged attributes</div>';
-    return `<strong>${escapeHtml(title)}</strong>${body}`;
+    return {
+      title: String(title),
+      html: `<strong>${escapeHtml(title)}</strong>${body}${directionsButtonHtml()}`,
+    };
   };
 
   map.on("click", (e) => {
@@ -1017,14 +1029,31 @@
     if (oid != null) {
       console.log("[map] osm_id:", oid, "| layer:", clicked.layer && clicked.layer.id);
     }
-    new maplibregl.Popup({
+    const { title, html } = popupHtml(clicked);
+    const popup = new maplibregl.Popup({
       closeButton: true,
       closeOnClick: true,
       maxWidth: "22rem",
     })
       .setLngLat(e.lngLat)
-      .setHTML(popupHtml(clicked))
+      .setHTML(html)
       .addTo(map);
+    const root = popup.getElement();
+    if (root) {
+      root.addEventListener("click", (ev) => {
+        const btn = ev.target.closest('button[data-action="directions"]');
+        if (!btn) return;
+        ev.preventDefault();
+        const route = window.MaristRoute;
+        if (!route) return;
+        route.setEnd({
+          lon: e.lngLat.lng,
+          lat: e.lngLat.lat,
+          label: title || null,
+        });
+        popup.remove();
+      });
+    }
   });
 
   CLICKABLE_LAYERS.forEach((id) => {

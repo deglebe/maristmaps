@@ -16,6 +16,7 @@ from agent.nav_context import reset_navigation_result, take_navigation_plan
 from agent.prompts import BITCH_MODE_SYSTEM_PROMPT, SYSTEM_PROMPT
 from agent.tools import find_place, navigate
 from app.locations import list_buildings
+from app.trip import brief_step_summary_for_reply
 
 log = get_logger("service")
 
@@ -376,6 +377,11 @@ def run_agent_turn(
         _log_langgraph_messages(messages)
         reply = _last_ai_text(messages) or reply
         plan = take_navigation_plan()
+
+    if plan:
+        steps_block = brief_step_summary_for_reply(plan)
+        if steps_block:
+            reply = f"{reply.rstrip()}\n\n{steps_block}".strip()
 
     if not reply:
         reply = (

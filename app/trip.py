@@ -5,6 +5,7 @@ trip coordinator: stitches indoor + outdoor routing into a single response.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 
 from app import indoor_routing as ir
@@ -83,13 +84,14 @@ def _outdoor_phase_dict(
     polyline = [list(p) for p in route.trackpoints]
     start_label = from_label or "your start"
     end_label = to_label or "your destination"
+    walk_text = (
+        f"Walk from {start_label} to {end_label} "
+        f"({_format_distance(route.distance_m)})."
+    )
     steps = [
         {
             "kind": "walk_outdoor",
-            "text": (
-                f"Walk from {start_label} to {end_label} "
-                f"({_format_distance(route.distance_m)})."
-            ),
+            "text": ir.expand_compass_for_speech(walk_text),
             "polyline": polyline,
             "distance_m": route.distance_m,
             "connector_name": None,
@@ -427,6 +429,123 @@ def plan_trip(
         "origin_label": origin_label,
         "destination_label": destination_label,
     }
+
+
+def _strip_parens_label(s: str | None) -> str:
+    """Drop parenthetical qualifiers from labels, e.g. ``Dyson (NE)`` → ``Dyson``."""
+    if not s:
+        return ""
+    return re.sub(r"\s*\([^)]*\)", "", str(s).strip()).strip()
+
+
+def _non_arrival_step_count(plan: dict) -> int:
+    n = 0
+    for ph in plan.get("phases") or []:
+        if ph.get("error"):
+            continue
+        for st in ph.get("steps") or []:
+            if (st.get("kind") or "") != "arrive":
+                n += 1
+    return n
+
+
+def _compact_outdoor_line(od: dict, next_ph: dict | None, dest_label: str) -> str:
+    target = None
+    if next_ph and next_ph.get("kind") == "indoor" and next_ph.get("building"):
+        target = str(next_ph["building"]).strip()
+    if not target:
+        target = _strip_parens_label(dest_label) or "the destination"
+    if target.lower() in ("your location", "your start"):
+        target = _strip_parens_label(dest_label) or "the building"
+    return f"Walk to {target}."
+
+
+def _extract_walk_dest(walk_text: str) -> str | None:
+    m = re.search(r"Walk to\s+(.+?)\s*\(", walk_text or "", re.DOTALL)
+    if not m:
+        return None
+    return m.group(1).strip()
+
+
+def _strip_distances_from_sentence(text: str) -> str:
+    """Remove parenthetical distance hints (feet, meters) from step prose."""
+    if not text:
+        return text
+    out = re.sub(
+        r"\s*\([^)]*(?:feet|foot|ft\.?|\bm\b|meter|metre)[^)]*\)",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", out).strip()
+
+
+def _compact_indoor_lines(phase: dict, dest_label: str, *, max_clauses: int) -> str:
+    """Short clauses for TTS; no distances; skips arrival and start-at-room."""
+    parts: list[str] = []
+    dest_short = _strip_parens_label(dest_label)
+    for s in phase.get("steps") or []:
+        if len(parts) >= max_clauses:
+            break
+        k = s.get("kind") or ""
+        if k in ("arrive", "start_at_room"):
+            continue
+        text = (s.get("text") or "").strip()
+        if k == "enter_building":
+            m = re.search(r"on the\s+(.+?)\s+side", text, re.IGNORECASE | re.DOTALL)
+            if m:
+                parts.append(f"Enter on the {m.group(1).strip()}.")
+            else:
+                parts.append("Go inside.")
+        elif k in ("walk_to_room", "walk_to_entrance", "walk_to_connector"):
+            wdest = _extract_walk_dest(text) or dest_short or "your destination"
+            lead = "Then go to " if parts else "Go to "
+            parts.append(f"{lead}{wdest}.")
+        elif k == "change_floor":
+            if text:
+                t = _strip_distances_from_sentence(text)
+                parts.append(t if t.endswith(".") else t + ".")
+        elif k == "exit_connector":
+            if text:
+                first = text.split(".")[0].strip()
+                first = _strip_distances_from_sentence(first)
+                parts.append(first + "." if first else text)
+        elif k in ("exit_room", "exit_building"):
+            if text:
+                t = _strip_distances_from_sentence(text)
+                parts.append(t if t.endswith(".") else t + ".")
+    return " ".join(parts)
+
+
+def brief_step_summary_for_reply(plan: dict, *, max_steps: int = 10) -> str | None:
+    """Short readable \"how to get there\" for agent voice/UI.
+
+    Omits single-leg routes. Compact, distance-free sentences (no meters or feet).
+    """
+    if _non_arrival_step_count(plan) <= 1:
+        return None
+    dest = (plan.get("destination_label") or "").strip() or "your destination"
+    phases = [p for p in (plan.get("phases") or []) if not p.get("error")]
+    chunks: list[str] = []
+    i = 0
+    while i < len(phases):
+        ph = phases[i]
+        kind = ph.get("kind")
+        if kind == "outdoor":
+            nxt = phases[i + 1] if i + 1 < len(phases) else None
+            chunks.append(_compact_outdoor_line(ph, nxt, dest))
+            i += 1
+        elif kind == "indoor":
+            line = _compact_indoor_lines(ph, dest, max_clauses=max_steps)
+            if line:
+                chunks.append(line)
+            i += 1
+        else:
+            i += 1
+    if not chunks:
+        return None
+    merged = " ".join(chunks)
+    return ir.expand_compass_for_speech(merged)
 
 
 def _auto_label(ep: Endpoint) -> str | None:

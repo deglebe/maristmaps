@@ -325,6 +325,12 @@
     return { lon, lat, label: pt.label || null };
   }
 
+  function currentGpsPoint() {
+    const geo = window.MaristGeo && window.MaristGeo.getLast && window.MaristGeo.getLast();
+    if (!geo || !Number.isFinite(geo.lon) || !Number.isFinite(geo.lat)) return null;
+    return { lon: geo.lon, lat: geo.lat, label: 'Your location' };
+  }
+
   const api = {
     setStart(pt) {
       state.from = normalizePoint(pt);
@@ -333,8 +339,26 @@
     },
     setEnd(pt) {
       state.to = normalizePoint(pt);
+      // Default the start to live GPS so picking only a destination
+      // (e.g. via the search popup's "Directions to here") plans a
+      // route immediately without forcing a second pick.
+      if (!state.from) {
+        const here = currentGpsPoint();
+        if (here) state.from = normalizePoint(here);
+      }
       renderMap();
       recomputeRoute();
+    },
+    /** Populate the start with the latest GPS fix if empty. Returns
+     *  whether a value was applied. */
+    useGpsAsStartIfEmpty() {
+      if (state.from) return false;
+      const here = currentGpsPoint();
+      if (!here) return false;
+      state.from = normalizePoint(here);
+      renderMap();
+      recomputeRoute();
+      return true;
     },
     swap() {
       const indoor = indoorSnapshot();

@@ -378,6 +378,12 @@
       if (focus) setTimeout(() => single.input.focus(), 0);
     } else if (mode === 'directions') {
       single.closeDropdown();
+      // Pre-fill the start with the user's live GPS so they only have
+      // to pick a destination. No-op if a start is already set or if
+      // we don't yet have a GPS fix.
+      if (window.MaristRoute && typeof window.MaristRoute.useGpsAsStartIfEmpty === 'function') {
+        window.MaristRoute.useGpsAsStartIfEmpty();
+      }
       if (focus) {
         // Defer so any pending mmap:route-changed event has populated
         // selected state before we pick a side.
@@ -511,7 +517,7 @@
           speed: 1.2,
           essential: true,
         });
-        new maplibregl.Popup({
+        const popup = new maplibregl.Popup({
           closeButton: true,
           closeOnClick: true,
           maxWidth: '22rem',
@@ -519,9 +525,24 @@
           .setLngLat([item.lon, item.lat])
           .setHTML(
             `<strong>${escapeHtml(item.name || '')}</strong>` +
-            `<div class="tag">${escapeHtml(item.subtitle || '')}</div>`
+            `<div class="tag">${escapeHtml(item.subtitle || '')}</div>` +
+            `<div class="popup-actions">` +
+            `  <button type="button" class="popup-action popup-action--to" data-action="directions">Directions</button>` +
+            `</div>`
           )
           .addTo(mmap.map);
+        const root = popup.getElement();
+        if (root) {
+          root.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('button[data-action="directions"]');
+            if (!btn) return;
+            ev.preventDefault();
+            const route = window.MaristRoute;
+            if (!route) return;
+            route.setEnd({ lon: item.lon, lat: item.lat, label: item.name || null });
+            popup.remove();
+          });
+        }
       }
       input.value = committedLabel(item);
       closeDropdown();
@@ -962,7 +983,13 @@
       });
     }
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => setMode('single'));
+      closeBtn.addEventListener('click', () => {
+        commit('from', null);
+        commit('to', null);
+        closeDropdown();
+        if (window.MaristRoute) window.MaristRoute.clear();
+        setMode('single');
+      });
     }
 
     // ---- react to route state changes (event from routing.js) ----------
@@ -1064,6 +1091,13 @@
       if (snap.from.label) out.from_label = snap.from.label;
       return out;
     }
+    const geo = window.MaristGeo && window.MaristGeo.getLast && window.MaristGeo.getLast();
+    if (geo && Number.isFinite(geo.lon) && Number.isFinite(geo.lat)) {
+      out.from_lon = geo.lon;
+      out.from_lat = geo.lat;
+      out.from_label = 'Your location';
+      return out;
+    }
     const mmap = window.MaristMap;
     if (mmap && mmap.map) {
       const c = mmap.map.getCenter();
@@ -1089,24 +1123,27 @@
   }
 
   function playAgentAudio(b64, mime, onEnded) {
-    if (!b64) {
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
       if (typeof onEnded === 'function') onEnded();
-      return;
-    }
+    };
+    if (!b64) { fire(); return; }
     const url = `data:${mime || 'audio/mpeg'};base64,${b64}`;
     const a = new Audio(url);
-    if (typeof onEnded === 'function') {
-      a.addEventListener('ended', () => onEnded());
-      a.addEventListener('error', () => onEnded());
-    }
+    a.addEventListener('ended', fire);
+    a.addEventListener('error', fire);
     a.play().catch((err) => {
       console.warn('[search] audio play failed', err);
-      if (typeof onEnded === 'function') onEnded();
+      fire();
     });
   }
 
   const MAX_CLARIFICATION_MIC_ROUNDS = 16;
   let clarificationMicRounds = 0;
+  let agentInFlight = false;
+  let voiceCaptureActive = false;
 
   function handleAgentPipelineResult(agent) {
     if (agent.reply) {
@@ -1165,6 +1202,13 @@
 
     startVoiceCapture = async function startVoiceCapture(opts) {
       const fromFollowup = !!(opts && opts.fromAutoFollowup);
+      if (voiceCaptureActive || agentInFlight) {
+        // Auto-followup or duplicate event fired while we're already
+        // recording or waiting on the agent — drop it. Without this,
+        // a single utterance can be transcribed and routed twice,
+        // making the agent reply audibly twice.
+        return;
+      }
       if (!fromFollowup) {
         clarificationMicRounds = 0;
       }
@@ -1175,6 +1219,7 @@
         console.warn('[search] microphone not available', err);
         return;
       }
+      voiceCaptureActive = true;
 
       const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
@@ -1208,6 +1253,7 @@
         cleaned = true;
         stream.getTracks().forEach((t) => t.stop());
         audioCtx.close().catch(() => {});
+        voiceCaptureActive = false;
       }
 
       function setUiRecording(on) {
@@ -1253,8 +1299,17 @@
               // is actually working on it.
               single.input.value = text;
               single.closeDropdown();
-              const agent = await invokeCampusAgent(text);
-              handleAgentPipelineResult(agent);
+              if (agentInFlight) {
+                console.warn('[search] dropping duplicate voice agent call');
+                return;
+              }
+              agentInFlight = true;
+              try {
+                const agent = await invokeCampusAgent(text);
+                handleAgentPipelineResult(agent);
+              } finally {
+                agentInFlight = false;
+              }
             } catch (e) {
               console.warn('[search] voice agent pipeline failed', e);
             } finally {
