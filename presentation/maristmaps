@@ -1,0 +1,31 @@
+maristmaps
+
+google maps for marist campus
+
+problem: current maps suck
+
+@map.ff
+
+solution: maristmaps
+- automatic routing
+- room-to-room routes
+- agent-assisted
+
+uses openstreetmap tile data+maplibre stack
+- served from martin vector server
+- uses postgis+geojson
+
+gpx-powered, custom turn-by-turn
+
+door-door optimized pathing
+using custom algorithm
++ 3d in-building pathing
+
+custom poi surveying+editing tools
+
+o4-powered agent
+- listens to vocal cues
+- routes with tool calls
+- correctable
+
+demo
