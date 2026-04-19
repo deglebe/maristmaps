@@ -227,6 +227,48 @@ body.app-shell--map .flash {
   color: #202124;
 }
 
+.search-icon-btn.search-voice-btn--recording {
+  color: #c5221f;
+  background: #fce8e6;
+  cursor: pointer;
+}
+
+.search-icon-btn.search-voice-btn--recording:hover {
+  background: #fad2cf;
+}
+
+#search-voice-btn {
+  position: relative;
+}
+
+.search-voice-btn__spinner {
+  display: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(95, 99, 104, 0.25);
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: search-voice-spin 0.8s linear infinite;
+}
+
+#search-voice-btn.search-voice-btn--processing {
+  cursor: progress;
+  background: #f1f3f4;
+  color: #1a73e8;
+}
+
+#search-voice-btn.search-voice-btn--processing .search-voice-btn__icon {
+  display: none;
+}
+
+#search-voice-btn.search-voice-btn--processing .search-voice-btn__spinner {
+  display: inline-block;
+}
+
+@keyframes search-voice-spin {
+  to { transform: rotate(360deg); }
+}
+
 .search-results {
   list-style: none;
   margin: 0;
