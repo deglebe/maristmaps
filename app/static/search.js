@@ -565,7 +565,237 @@
   // state without focusing so we don't steal focus from the map on load.
   setMode('single', { focus: false });
 
-  // ---- formatting ------------------------------------------------------
+  function buildAgentLocationPayload() {
+    const out = {};
+    const snap = window.MaristRoute && window.MaristRoute.snapshot;
+    if (snap && snap.from && Number.isFinite(snap.from.lon) && Number.isFinite(snap.from.lat)) {
+      out.from_lon = snap.from.lon;
+      out.from_lat = snap.from.lat;
+      if (snap.from.label) out.from_label = snap.from.label;
+      return out;
+    }
+    const mmap = window.MaristMap;
+    if (mmap && mmap.map) {
+      const c = mmap.map.getCenter();
+      out.from_lon = c.lng;
+      out.from_lat = c.lat;
+      out.from_label = 'Map view center';
+    }
+    return out;
+  }
+
+  async function invokeCampusAgent(message) {
+    const body = { message, ...buildAgentLocationPayload() };
+    const res = await fetch('/api/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || `HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  function playAgentAudio(b64, mime, onEnded) {
+    if (!b64) {
+      if (typeof onEnded === 'function') onEnded();
+      return;
+    }
+    const url = `data:${mime || 'audio/mpeg'};base64,${b64}`;
+    const a = new Audio(url);
+    if (typeof onEnded === 'function') {
+      a.addEventListener('ended', () => onEnded());
+      a.addEventListener('error', () => onEnded());
+    }
+    a.play().catch((err) => {
+      console.warn('[search] audio play failed', err);
+      if (typeof onEnded === 'function') onEnded();
+    });
+  }
+
+  const MAX_CLARIFICATION_MIC_ROUNDS = 16;
+  let clarificationMicRounds = 0;
+
+  function handleAgentPipelineResult(agent) {
+    if (agent.reply) {
+      document.dispatchEvent(new CustomEvent('mmap:agent-reply', {
+        detail: {
+          reply: agent.reply,
+          navigated: !!agent.navigated,
+          response_code: agent.response_code,
+          reopen_mic: !!agent.reopen_mic,
+        },
+      }));
+    }
+    if (agent.navigated && agent.route && window.MaristRoute) {
+      window.MaristRoute.setRouteFromServer(agent.route);
+      setMode('directions');
+      clarificationMicRounds = 0;
+    }
+    const reopen = agent.reopen_mic === true
+      || agent.response_code === 'CLARIFICATION_PENDING'
+      || (agent.response_code_numeric === 1);
+    const afterPlayback = () => {
+      if (agent.navigated) return;
+      if (!reopen) {
+        clarificationMicRounds = 0;
+        return;
+      }
+      if (clarificationMicRounds >= MAX_CLARIFICATION_MIC_ROUNDS) {
+        console.warn('[search] max voice clarification rounds');
+        clarificationMicRounds = 0;
+        return;
+      }
+      clarificationMicRounds++;
+      window.setTimeout(() => startVoiceCapture({ fromAutoFollowup: true }), 450);
+    };
+    if (agent.audio_base64) {
+      playAgentAudio(agent.audio_base64, agent.audio_mime, afterPlayback);
+    } else {
+      afterPlayback();
+    }
+  }
+
+  const voiceBtn = document.getElementById('search-voice-btn');
+  let startVoiceCapture = async () => {};
+
+  if (voiceBtn) {
+    let cancelRecording = null;
+
+    voiceBtn.addEventListener('click', () => {
+      if (typeof cancelRecording === 'function') {
+        cancelRecording();
+        return;
+      }
+      startVoiceCapture({ fromAutoFollowup: false });
+    });
+
+    startVoiceCapture = async function startVoiceCapture(opts) {
+      const fromFollowup = !!(opts && opts.fromAutoFollowup);
+      if (!fromFollowup) {
+        clarificationMicRounds = 0;
+      }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        console.warn('[search] microphone not available', err);
+        return;
+      }
+
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+      const mr = new MediaRecorder(stream, { mimeType: mime });
+      const chunks = [];
+      mr.addEventListener('dataavailable', (e) => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      });
+
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+
+      const SILENCE_MS = 2000;
+      const MAX_MS = 90000;
+      const SPEECH_RMS = 0.028;
+      const SILENCE_RMS = 0.02;
+
+      let hadSpeech = false;
+      let silenceAt = null;
+      let raf = 0;
+      let cleaned = false;
+      const t0 = performance.now();
+
+      function cleanupTracks() {
+        if (cleaned) return;
+        cleaned = true;
+        stream.getTracks().forEach((t) => t.stop());
+        audioCtx.close().catch(() => {});
+      }
+
+      function setUiRecording(on) {
+        voiceBtn.classList.toggle('search-voice-btn--recording', on);
+        voiceBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+
+      function finish(transcode) {
+        cancelAnimationFrame(raf);
+        cancelRecording = null;
+        setUiRecording(false);
+        mr.onstop = () => {
+          cleanupTracks();
+          if (!transcode || !chunks.length) return;
+          const blob = new Blob(chunks, { type: mime });
+          if (blob.size < 120) return;
+          (async () => {
+            try {
+              const fd = new FormData();
+              fd.append('audio', blob, 'speech.webm');
+              const tr = await fetch('/api/agent/transcribe', { method: 'POST', body: fd });
+              if (!tr.ok) throw new Error(await tr.text());
+              const js = await tr.json();
+              const text = (js.text || '').trim();
+              if (!text) return;
+              single.input.value = text;
+              single.sync();
+              const agent = await invokeCampusAgent(text);
+              handleAgentPipelineResult(agent);
+            } catch (e) {
+              console.warn('[search] voice agent pipeline failed', e);
+            }
+          })();
+        };
+        try {
+          if (mr.state === 'recording') mr.stop();
+          else cleanupTracks();
+        } catch (_e) {
+          cleanupTracks();
+        }
+      }
+
+      cancelRecording = () => finish(false);
+
+      setUiRecording(true);
+      mr.start(200);
+
+      function tick() {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / data.length);
+        const now = performance.now();
+
+        if (rms >= SPEECH_RMS) {
+          hadSpeech = true;
+          silenceAt = null;
+        } else if (hadSpeech && rms < SILENCE_RMS) {
+          if (silenceAt === null) silenceAt = now;
+          else if (now - silenceAt >= SILENCE_MS) {
+            finish(true);
+            return;
+          }
+        } else {
+          silenceAt = null;
+        }
+
+        if (now - t0 >= MAX_MS) {
+          finish(true);
+          return;
+        }
+        raf = requestAnimationFrame(tick);
+      }
+      raf = requestAnimationFrame(tick);
+    }
+  }
 
   function fmtDistance(m) {
     if (!Number.isFinite(m)) return '';

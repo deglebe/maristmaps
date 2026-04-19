@@ -1,7 +1,10 @@
+import json
 import os
 import re
 
-from flask import Blueprint, Response, abort, jsonify, render_template, request
+from flask import Blueprint, Response, abort, jsonify, render_template, request, session
+from langchain_core.messages import SystemMessage, message_to_dict, messages_from_dict
+from openai import BadRequestError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,8 +18,46 @@ from app.locations import (
     load_locations,
     reset_locations_cache,
 )
+from agent.logutil import get_logger, trunc_preview
+from agent.service import run_agent_turn_b64, speech_to_text
 
 bp = Blueprint("main", __name__)
+agent_http_log = get_logger("http")
+
+# LangChain agent conversation (signed cookie session; kept small).
+_AGENT_SESSION_KEY = "agent_lc_messages_v1"
+_AGENT_MAX_MESSAGES = 24
+_AGENT_MAX_COOKIE_BYTES = 3800
+
+
+def _prune_agent_message_dicts(ser: list) -> list:
+    """Keep recent history and stay under rough cookie size limits."""
+    out = list(ser)
+    while len(out) > _AGENT_MAX_MESSAGES:
+        out.pop(0)
+    while len(json.dumps(out).encode("utf-8")) > _AGENT_MAX_COOKIE_BYTES and len(out) > 4:
+        out = out[4:]
+    return out
+
+
+def _load_agent_session_messages():
+    raw = session.get(_AGENT_SESSION_KEY)
+    if not raw:
+        return []
+    try:
+        msgs = messages_from_dict(raw)
+    except (TypeError, ValueError, KeyError):
+        session.pop(_AGENT_SESSION_KEY, None)
+        return []
+    return [m for m in msgs if not isinstance(m, SystemMessage)]
+
+
+def _save_agent_session_messages(msgs: list) -> None:
+    stripped = [m for m in msgs if not isinstance(m, SystemMessage)]
+    ser = [message_to_dict(m) for m in stripped]
+    ser = _prune_agent_message_dicts(ser)
+    session[_AGENT_SESSION_KEY] = ser
+    session.modified = True
 
 
 def _map_page_config():
@@ -348,3 +389,117 @@ def api_route_rebuild():
     routing.reset_graph_cache()
     reset_locations_cache()
     return jsonify({"ok": True})
+
+
+@bp.route("/api/agent/transcribe", methods=["POST"])
+def api_agent_transcribe():
+    """Speech-to-text (Whisper). Expects multipart field `audio`."""
+    if not os.environ.get("OPENAI_API_KEY"):
+        abort(503, description="OPENAI_API_KEY is not configured")
+    f = request.files.get("audio")
+    if f is None or f.filename == "":
+        abort(400, description="missing audio file")
+    raw = f.read()
+    if not raw:
+        abort(400, description="empty audio upload")
+    agent_http_log.info(
+        "POST /api/agent/transcribe bytes=%s filename=%s",
+        len(raw),
+        f.filename,
+    )
+    text = speech_to_text(raw, f.filename or "audio.webm", f.mimetype)
+    agent_http_log.info("POST /api/agent/transcribe done text_len=%s", len(text))
+    return jsonify({"text": text})
+
+
+@bp.route("/api/agent", methods=["POST"])
+def api_agent():
+    """Run the navigation agent: JSON body with `message` and optional start hints.
+
+    Session: conversation is stored in the Flask session so follow-ups keep context.
+    Send ``reset: true`` to start a new conversation.
+
+    Response ``response_code`` / ``response_code_numeric``:
+      ``CLARIFICATION_PENDING`` / 1 — needs more info; ``reopen_mic`` is true.
+      ``ROUTE_READY`` / 2 — a route was computed; ``reopen_mic`` is false.
+    """
+    if not os.environ.get("OPENAI_API_KEY"):
+        abort(503, description="OPENAI_API_KEY is not configured")
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        abort(400, description="expected JSON object")
+
+    if data.get("reset"):
+        session.pop(_AGENT_SESSION_KEY, None)
+        session.modified = True
+
+    message = (data.get("message") or "").strip()
+    if not message:
+        abort(400, description="message is required")
+
+    from_label = data.get("from_label")
+    from_lon = data.get("from_lon")
+    from_lat = data.get("from_lat")
+
+    history = _load_agent_session_messages()
+    agent_http_log.info(
+        "POST /api/agent reset=%s message_preview=%r history_messages=%s from_lon=%s from_lat=%s from_label=%r",
+        bool(data.get("reset")),
+        trunc_preview(message, 900),
+        len(history),
+        from_lon,
+        from_lat,
+        from_label,
+    )
+
+    try:
+        reply, plan, audio_b64, outbound = run_agent_turn_b64(
+            message,
+            history=history,
+            from_lon=from_lon,
+            from_lat=from_lat,
+            from_label=from_label if isinstance(from_label, str) else None,
+        )
+    except BadRequestError as err:
+        agent_http_log.warning(
+            "POST /api/agent OpenAI BadRequestError (session cleared): %s",
+            err,
+        )
+        session.pop(_AGENT_SESSION_KEY, None)
+        session.modified = True
+        abort(
+            502,
+            description="Chat session was reset (invalid history). Retry your message.",
+        )
+    except RuntimeError as err:
+        agent_http_log.exception("POST /api/agent RuntimeError: %s", err)
+        abort(503, description=str(err))
+
+    try:
+        _save_agent_session_messages(outbound)
+    except Exception:
+        session.pop(_AGENT_SESSION_KEY, None)
+        session.modified = True
+
+    needs_clarification = plan is None
+    response_code = "CLARIFICATION_PENDING" if needs_clarification else "ROUTE_READY"
+    response_code_numeric = 1 if needs_clarification else 2
+
+    agent_http_log.info(
+        "POST /api/agent response response_code=%s navigated=%s reply_preview=%r audio_b64_len=%s",
+        response_code,
+        plan is not None,
+        trunc_preview(reply, 600),
+        len(audio_b64) if audio_b64 else 0,
+    )
+
+    return jsonify({
+        "reply": reply,
+        "navigated": plan is not None,
+        "route": plan,
+        "audio_base64": audio_b64,
+        "audio_mime": "audio/mpeg" if audio_b64 else None,
+        "response_code": response_code,
+        "response_code_numeric": response_code_numeric,
+        "reopen_mic": needs_clarification,
+    })

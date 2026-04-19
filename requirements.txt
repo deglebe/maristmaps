@@ -7,8 +7,11 @@ greenlet==3.4.0
 networkx==3.3
 itsdangerous==2.2.0
 Jinja2==3.1.6
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain>=0.3.0
 MarkupSafe==3.0.3
-networkx==3.3
+openai>=1.40.0
 packaging==26.1
 psycopg2-binary==2.9.11
 SQLAlchemy==2.0.49

@@ -192,12 +192,11 @@ def _entrances_of(building: str, locations: list[ir.LocationRow]) -> list[ir.Loc
 
 def _haversine_m(a, b):
     # cheap — used only for entrance picking on small buildings
-    import math as _m
-    lon1, lat1 = _m.radians(a[0]), _m.radians(a[1])
-    lon2, lat2 = _m.radians(b[0]), _m.radians(b[1])
+    lon1, lat1 = math.radians(a[0]), math.radians(a[1])
+    lon2, lat2 = math.radians(b[0]), math.radians(b[1])
     dlon, dlat = lon2 - lon1, lat2 - lat1
-    h = _m.sin(dlat/2)**2 + _m.cos(lat1)*_m.cos(lat2)*_m.sin(dlon/2)**2
-    return 2 * 6_371_008.8 * _m.asin(_m.sqrt(h))
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 2 * 6_371_008.8 * math.asin(math.sqrt(h))
 
 
 def _nearest_entrance(

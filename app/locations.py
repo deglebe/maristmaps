@@ -89,6 +89,45 @@ def reset_locations_cache() -> None:
 # --- lookups -----------------------------------------------------------------
 
 
+def normalize_room_code(room: str | None) -> str:
+    """Strip common prefixes; keep labels like '2016 - Conference Room' intact."""
+    if room is None:
+        return ""
+    s = str(room).strip()
+    if not s:
+        return s
+    low = s.lower()
+    for prefix in ("room ", "rm. ", "rm ", "suite ", "#"):
+        if low.startswith(prefix):
+            s = s[len(prefix) :].strip()
+            low = s.lower()
+    return s
+
+
+def resolve_building_for_agent(name: str) -> str:
+    """Map free-text building names to a canonical value from ``list_buildings()``."""
+    raw = (name or "").strip()
+    if not raw:
+        return raw
+    names = list_buildings()
+    if not names:
+        return raw
+    rlow = raw.lower()
+    for b in names:
+        if b.lower() == rlow:
+            return b
+    loose = [b for b in names if rlow in b.lower() or b.lower() in rlow]
+    if len(loose) == 1:
+        return loose[0]
+    pref = [
+        b for b in names
+        if b.lower().startswith(rlow) or rlow.startswith(b.lower())
+    ]
+    if len(pref) == 1:
+        return pref[0]
+    return raw
+
+
 def find_room(building: str, room: str) -> LocationRow | None:
     """exact match on (building, kind='room', room). case-insensitive
     building, case-sensitive room (room labels sometimes contain
