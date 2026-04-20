@@ -237,7 +237,6 @@
         },
       },
 
-      // --- Vehicle roads: OSM-style casing/fill hierarchy ---
       {
         id: "roads-minor-casing",
         type: "line",
@@ -289,9 +288,6 @@
         },
       },
 
-      // --- Buildings (2D) ---
-      // Visible whenever the map is not tilted; the `pitchend` handler below
-      // swaps these out for the 3D extrusion layer when you tilt the camera.
       {
         id: "buildings",
         type: "fill",
@@ -323,11 +319,6 @@
         paint: { "fill-color": C.buildingHover, "fill-opacity": 0.55 },
       },
 
-      // --- Buildings (3D extrusion, shown only when the camera is tilted) ---
-      // Height comes from OSM `height` (meters) when present, else from
-      // `building:levels * 3.5`, else a 10 m fallback so every building has
-      // some mass. The extrusion layer is hidden at pitch=0 so zoomed-out,
-      // straight-down views stay crisp and legible.
       {
         id: "buildings-3d",
         type: "fill-extrusion",
@@ -351,7 +342,6 @@
         },
       },
 
-      // --- Paths: campus headline, but calmer than before ---
       {
         id: "paths-casing",
         type: "line",
@@ -419,10 +409,6 @@
         },
       },
 
-      // --- POIs ---
-      // POI circles are temporarily hidden via `layout.visibility` — the
-      // underlying source/filter is kept so turning them back on is a
-      // one-line change.
       {
         id: "poi-circles",
         type: "circle",
@@ -454,11 +440,6 @@
           "circle-stroke-width": 1.2,
         },
       },
-
-      // --- Labels ---
-      // Text / symbol layers are intentionally omitted until we self-host a
-      // glyph set; see the `glyphs:` comment above. Popups on click still
-      // surface every tagged attribute, so we don't lose discoverability.
     ],
   };
 
@@ -498,32 +479,26 @@
     map.resize();
   });
 
-  // ---------- theme swap --------------------------------------------------
-  //
-  // theme.js fires `mmap:theme-change` on document whenever the user flips
-  // the toggle. Each layer that was painted with a palette color has an
-  // entry in COLORED_LAYERS so we can repaint without reloading the whole
-  // style (which would drop runtime-added sources / hover filters).
   const COLORED_LAYERS = [
-    ["bg",                 "background-color",      "bg"],
-    ["landuse-green",      "fill-color",            "green"],
-    ["landuse-campus",     "fill-color",            "campus"],
-    ["landuse-paved",      "fill-color",            "paved"],
-    ["water-fill",         "fill-color",            "water"],
-    ["waterway",           "line-color",            "water"],
-    ["roads-minor-casing", "line-color",            "minorCase"],
-    ["roads-minor",        "line-color",            "minorFill"],
-    ["roads-major-casing", "line-color",            "majorCase"],
-    ["roads-major",        "line-color",            "majorFill"],
-    ["buildings",          "fill-color",            "building"],
-    ["buildings-outline",  "line-color",            "buildOutline"],
-    ["buildings-hover",    "fill-color",            "buildingHover"],
-    ["buildings-3d",       "fill-extrusion-color",  "building"],
-    ["paths-casing",       "line-color",            "pathCasing"],
-    ["paths",              "line-color",            "pathFill"],
-    ["paths-stairs",       "line-color",            "pathStairs"],
-    ["poi-circles",        "circle-color",          "poiFill"],
-    ["poi-circles",        "circle-stroke-color",   "poiStroke"],
+    ["bg", "background-color", "bg"],
+    ["landuse-green", "fill-color", "green"],
+    ["landuse-campus", "fill-color", "campus"],
+    ["landuse-paved", "fill-color", "paved"],
+    ["water-fill", "fill-color", "water"],
+    ["waterway", "line-color", "water"],
+    ["roads-minor-casing", "line-color", "minorCase"],
+    ["roads-minor", "line-color", "minorFill"],
+    ["roads-major-casing", "line-color", "majorCase"],
+    ["roads-major", "line-color", "majorFill"],
+    ["buildings", "fill-color", "building"],
+    ["buildings-outline", "line-color", "buildOutline"],
+    ["buildings-hover", "fill-color", "buildingHover"],
+    ["buildings-3d", "fill-extrusion-color", "building"],
+    ["paths-casing", "line-color", "pathCasing"],
+    ["paths", "line-color", "pathFill"],
+    ["paths-stairs", "line-color", "pathStairs"],
+    ["poi-circles", "circle-color", "poiFill"],
+    ["poi-circles", "circle-stroke-color", "poiStroke"],
   ];
 
   const applyTheme = (name) => {
@@ -568,7 +543,7 @@
    * Nothing.
    */
 
-   const update3dLayers = () => {
+  const update3dLayers = () => {
     const shouldBe3d = map.getPitch() > PITCH_3D_THRESHOLD;
     if (shouldBe3d === in3d) return;
     in3d = shouldBe3d;
@@ -583,12 +558,13 @@
     // MaristRoute.set3dMode no-ops when state is already in sync, and
     // routing.js's own mmap.ready handler will pick up the current map
     // pitch on its first renderMap() call.
-    if (window.MaristRoute && typeof window.MaristRoute.set3dMode === "function") {
+    if (
+      window.MaristRoute &&
+      typeof window.MaristRoute.set3dMode === "function"
+    ) {
       window.MaristRoute.set3dMode(in3d);
     }
   };
-
-
 
   map.on("pitch", update3dLayers);
   map.on("load", update3dLayers);
@@ -709,8 +685,7 @@
     const s = raw.trim();
     if (!s || s === "{}") return out;
     const unesc = (t) => t.replace(/\\(.)/g, "$1");
-    const re =
-      /"((?:[^"\\]|\\.)*)"\s*=>\s*(?:"((?:[^"\\]|\\.)*)"|NULL)/g;
+    const re = /"((?:[^"\\]|\\.)*)"\s*=>\s*(?:"((?:[^"\\]|\\.)*)"|NULL)/g;
     let m;
     while ((m = re.exec(s)) !== null) {
       const key = unesc(m[1]);
@@ -823,9 +798,7 @@
    */
   const labelForKey = (k) => {
     if (KEY_LABELS[k]) return KEY_LABELS[k];
-    return k.includes(":")
-      ? k.replace(/:/g, " · ")
-      : humanizeUnderscore(k);
+    return k.includes(":") ? k.replace(/:/g, " · ") : humanizeUnderscore(k);
   };
 
   /**
@@ -913,7 +886,8 @@
     if (p.brand && String(p.brand).trim()) return String(p.brand).trim();
     if (p.amenity) return humanizeUnderscore(p.amenity);
     if (p.shop) return humanizeUnderscore(p.shop);
-    if (p.building && p.building !== "yes") return humanizeUnderscore(p.building);
+    if (p.building && p.building !== "yes")
+      return humanizeUnderscore(p.building);
     return "Building";
   };
 
@@ -1009,9 +983,13 @@
     if (p.wheelchair)
       accLines.push(`Building / paths: ${humanizeUnderscore(p.wheelchair)}`);
     if (p["toilets:wheelchair"])
-      accLines.push(`Restrooms: ${humanizeUnderscore(p["toilets:wheelchair"])}`);
+      accLines.push(
+        `Restrooms: ${humanizeUnderscore(p["toilets:wheelchair"])}`,
+      );
     if (p["entrance:wheelchair"])
-      accLines.push(`Entrance: ${humanizeUnderscore(p["entrance:wheelchair"])}`);
+      accLines.push(
+        `Entrance: ${humanizeUnderscore(p["entrance:wheelchair"])}`,
+      );
     if (accLines.length) pushRow("Accessibility", accLines.join("\n"), true);
 
     if (p.access) pushRow("General access", humanizeUnderscore(p.access));
@@ -1044,7 +1022,8 @@
       if (v === undefined || v === null || String(v).trim() === "") continue;
       const label = labelForKey(k);
       let display = String(v);
-      if (k === "highway" || k === "amenity") display = humanizeUnderscore(display);
+      if (k === "highway" || k === "amenity")
+        display = humanizeUnderscore(display);
       rows.push(
         `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(display)}</td></tr>`,
       );
@@ -1064,11 +1043,10 @@
    * Returns:
    * HTML string passed to Popup#setHTML.
    */
-  const directionsButtonHtml = () => (
+  const directionsButtonHtml = () =>
     `<div class="popup-actions">` +
     `  <button type="button" class="popup-action popup-action--to" data-action="directions">Directions</button>` +
-    `</div>`
-  );
+    `</div>`;
 
   const popupHtml = (feature) => {
     const raw = feature.properties || {};
@@ -1123,7 +1101,12 @@
     const clicked = features[0];
     const oid = clicked.properties && clicked.properties.osm_id;
     if (oid != null) {
-      console.log("[map] osm_id:", oid, "| layer:", clicked.layer && clicked.layer.id);
+      console.log(
+        "[map] osm_id:",
+        oid,
+        "| layer:",
+        clicked.layer && clicked.layer.id,
+      );
     }
     const { title, html } = popupHtml(clicked);
     const popup = new maplibregl.Popup({

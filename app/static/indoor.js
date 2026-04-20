@@ -15,49 +15,49 @@
  */
 (function () {
   const state = {
-    targets: [],       // full list from /api/indoor/index
-    from: null,        // { endpoint, label, kind, building } | null
+    targets: [], // full list from /api/indoor/index
+    from: null, // { endpoint, label, kind, building } | null
     to: null,
     preferElevator: false,
   };
 
-  const elev = document.getElementById('directions-prefer-elevator');
-  const steps = document.getElementById('directions-steps');
-
-  // --- load target index ------------------------------------------------
+  const elev = document.getElementById("directions-prefer-elevator");
+  const steps = document.getElementById("directions-steps");
 
   const readyPromise = (async () => {
     try {
-      const res = await fetch('/api/indoor/index', {
-        headers: { Accept: 'application/json' },
+      const res = await fetch("/api/indoor/index", {
+        headers: { Accept: "application/json" },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       state.targets = Array.isArray(data.targets) ? data.targets : [];
     } catch (err) {
-      console.warn('[indoor] /api/indoor/index failed:', err);
+      console.warn("[indoor] /api/indoor/index failed:", err);
       state.targets = [];
     }
   })();
 
-  // --- prefer-elevator toggle ------------------------------------------
-
   if (elev) {
-    elev.addEventListener('change', () => {
+    elev.addEventListener("change", () => {
       state.preferElevator = !!elev.checked;
       emit();
     });
   }
 
-  // --- rendering utils (shared with step renderer) ---------------------
-
   function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    })[c]);
+    return String(s ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
   }
-
-  // --- state + public API ----------------------------------------------
 
   function sameState(a, b) {
     if (a === b) return true;
@@ -68,11 +68,11 @@
   function setState(side, target, { silent = false } = {}) {
     const next = target
       ? {
-        endpoint: target.endpoint,
-        label: target.label,
-        kind: target.kind,
-        building: target.building,
-      }
+          endpoint: target.endpoint,
+          label: target.label,
+          kind: target.kind,
+          building: target.building,
+        }
       : null;
     if (sameState(state[side], next)) return;
     state[side] = next;
@@ -88,9 +88,11 @@
   }
 
   function emit() {
-    document.dispatchEvent(new CustomEvent('mmap:indoor-changed', {
-      detail: snapshot(),
-    }));
+    document.dispatchEvent(
+      new CustomEvent("mmap:indoor-changed", {
+        detail: snapshot(),
+      }),
+    );
   }
 
   /**
@@ -109,8 +111,10 @@
       return true;
     }
     if (!target.tokens) {
-      const found = state.targets.find((t) =>
-        JSON.stringify(t.endpoint) === JSON.stringify(target.endpoint || target),
+      const found = state.targets.find(
+        (t) =>
+          JSON.stringify(t.endpoint) ===
+          JSON.stringify(target.endpoint || target),
       );
       if (found) target = found;
       // If no match, still accept: caller may have manually constructed
@@ -123,20 +127,19 @@
   }
 
   function swap() {
-    const a = state.from, b = state.to;
+    const a = state.from,
+      b = state.to;
     state.from = b;
     state.to = a;
     emit();
   }
-
-  // --- step list rendering ---------------------------------------------
 
   function renderSteps(route) {
     const ol = steps;
     if (!ol) return;
     if (!route || !Array.isArray(route.phases) || !route.phases.length) {
       ol.hidden = true;
-      ol.innerHTML = '';
+      ol.innerHTML = "";
       return;
     }
     const parts = [];
@@ -144,29 +147,32 @@
       parts.push(renderPhaseHeader(phase));
       for (const step of phase.steps || []) parts.push(renderStep(step));
     });
-    ol.innerHTML = parts.join('');
+    ol.innerHTML = parts.join("");
     ol.hidden = false;
   }
 
   function fmtMeters(m) {
-    if (!Number.isFinite(m)) return '';
+    if (!Number.isFinite(m)) return "";
     if (m < 1000) return `${Math.round(m)} m`;
     return `${(m / 1000).toFixed(2)} km`;
   }
 
   function renderPhaseHeader(phase) {
-    let summary = '';
-    if (phase.kind === 'outdoor') {
+    let summary = "";
+    if (phase.kind === "outdoor") {
       summary = `Outdoor · ${fmtMeters(phase.distance_m)}`;
     } else {
-      const b = phase.building || '';
-      const floors = phase.from_floor != null && phase.to_floor != null
-        ? ` · Floor ${phase.from_floor}${phase.from_floor !== phase.to_floor ? ' → ' + phase.to_floor : ''}`
-        : '';
+      const b = phase.building || "";
+      const floors =
+        phase.from_floor != null && phase.to_floor != null
+          ? ` · Floor ${phase.from_floor}${phase.from_floor !== phase.to_floor ? " → " + phase.to_floor : ""}`
+          : "";
       const conn = phase.connector_used
-        ? ` · via ${phase.connector_kind || 'stairs'} ${phase.connector_used}`
-        : '';
-      const fallback = phase.used_fallback ? ' <span class="phase-badge">fallback</span>' : '';
+        ? ` · via ${phase.connector_kind || "stairs"} ${phase.connector_used}`
+        : "";
+      const fallback = phase.used_fallback
+        ? ' <span class="phase-badge">fallback</span>'
+        : "";
       summary = `Indoor · ${escapeHtml(b)}${floors}${conn}${fallback} · ${fmtMeters(phase.distance_m)}`;
     }
     return (
@@ -177,15 +183,9 @@
     );
   }
 
-  // ---- shared icon SVGs -----------------------------------------------
-  //
-  // Reused between step rows (inline chips) and map markers (routing.js).
-  // Shapes match tools/csv_viz.html so anyone familiar with that debugger
-  // recognizes them.
-
   const ICONS = {
     door(size = 14) {
-      const h = Math.round(size * 16 / 14);
+      const h = Math.round((size * 16) / 14);
       return (
         `<svg width="${size}" height="${h}" viewBox="0 0 14 16" aria-hidden="true">` +
         `<rect x="2" y="2" width="10" height="13" rx="1.5" ` +
@@ -216,13 +216,13 @@
 
   function iconNameForStep(step) {
     switch (step.kind) {
-      case 'exit_room':
-      case 'enter_building':
-      case 'exit_building':
-        return 'door';
-      case 'change_floor':
-      case 'exit_connector':
-        return step.connector_kind === 'elevator' ? 'elevator' : 'stairs';
+      case "exit_room":
+      case "enter_building":
+      case "exit_building":
+        return "door";
+      case "change_floor":
+      case "exit_connector":
+        return step.connector_kind === "elevator" ? "elevator" : "stairs";
       default:
         return null;
     }
@@ -230,7 +230,7 @@
 
   function renderStepIcon(step) {
     const name = iconNameForStep(step);
-    if (!name) return '';
+    if (!name) return "";
     return `<span class="step__icon step__icon--${name}">${ICONS[name](14)}</span>`;
   }
 
@@ -238,7 +238,7 @@
     const icon = renderStepIcon(step);
     const turn = step.turn
       ? `<span class="step__turn step__turn--${step.turn}">${escapeHtml(step.turn)}</span>`
-      : '';
+      : "";
     return (
       `<li class="step step--${escapeHtml(step.kind)}">` +
       `${icon}${turn}<span class="step__text">${escapeHtml(step.text)}</span>` +
@@ -252,7 +252,9 @@
     swap,
     renderSteps,
     ready: readyPromise,
-    get targets() { return state.targets.slice(); },
+    get targets() {
+      return state.targets.slice();
+    },
     icons: ICONS,
     iconNameForStep,
   };

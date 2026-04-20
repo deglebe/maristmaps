@@ -10,74 +10,74 @@
 :root,
 [data-theme="dark"] {
   /* Everforest – dark, medium (canonical values from sainnhe/everforest) */
-  --ef-bg-dim:    #232a2e;
-  --ef-bg0:       #2d353b;
-  --ef-bg1:       #343f44;
-  --ef-bg2:       #3d484d;
-  --ef-bg3:       #475258;
-  --ef-bg4:       #4f585e;
-  --ef-bg5:       #56635f;
+  --ef-bg-dim: #232a2e;
+  --ef-bg0: #2d353b;
+  --ef-bg1: #343f44;
+  --ef-bg2: #3d484d;
+  --ef-bg3: #475258;
+  --ef-bg4: #4f585e;
+  --ef-bg5: #56635f;
   --ef-bg-visual: #543a48;
-  --ef-bg-red:    #514045;
-  --ef-bg-green:  #425047;
+  --ef-bg-red: #514045;
+  --ef-bg-green: #425047;
   --ef-bg-yellow: #4d4c43;
-  --ef-bg-blue:   #3a515d;
+  --ef-bg-blue: #3a515d;
 
-  --ef-fg:     #d3c6aa;
-  --ef-grey0:  #7a8478;
-  --ef-grey1:  #859289;
-  --ef-grey2:  #9da9a0;
+  --ef-fg: #d3c6aa;
+  --ef-grey0: #7a8478;
+  --ef-grey1: #859289;
+  --ef-grey2: #9da9a0;
 
-  --ef-red:    #e67e80;
+  --ef-red: #e67e80;
   --ef-orange: #e69875;
   --ef-yellow: #dbbc7f;
-  --ef-green:  #a7c080;
-  --ef-aqua:   #83c092;
-  --ef-blue:   #7fbbb3;
+  --ef-green: #a7c080;
+  --ef-aqua: #83c092;
+  --ef-blue: #7fbbb3;
   --ef-purple: #d699b6;
 
   /* Semantic slots */
-  --color-bg:            var(--ef-bg0);
-  --color-surface:       var(--ef-bg1);
-  --color-surface-alt:   var(--ef-bg2);
-  --color-surface-sunken:var(--ef-bg2);
+  --color-bg: var(--ef-bg0);
+  --color-surface: var(--ef-bg1);
+  --color-surface-alt: var(--ef-bg2);
+  --color-surface-sunken: var(--ef-bg2);
   --color-surface-hover: var(--ef-bg3);
-  --color-border:        var(--ef-bg3);
+  --color-border: var(--ef-bg3);
   --color-border-strong: var(--ef-bg4);
-  --color-divider:       var(--ef-bg2);
+  --color-divider: var(--ef-bg2);
 
-  --color-text:          var(--ef-fg);
-  --color-text-strong:   #e8dcc0;
-  --color-text-muted:    var(--ef-grey2);
-  --color-text-dim:      var(--ef-grey1);
+  --color-text: var(--ef-fg);
+  --color-text-strong: #e8dcc0;
+  --color-text-muted: var(--ef-grey2);
+  --color-text-dim: var(--ef-grey1);
 
-  --color-accent:        var(--ef-blue);
+  --color-accent: var(--ef-blue);
   --color-accent-strong: #a8d3ce;
-  --color-accent-bg:     var(--ef-bg-blue);
+  --color-accent-bg: var(--ef-bg-blue);
   --color-accent-contrast: #1e2529;
 
-  --color-success:       var(--ef-green);
-  --color-success-bg:    var(--ef-bg-green);
-  --color-warning:       var(--ef-orange);
-  --color-warning-bg:    #4a3e36;
-  --color-danger:        var(--ef-red);
-  --color-danger-bg:     var(--ef-bg-red);
+  --color-success: var(--ef-green);
+  --color-success-bg: var(--ef-bg-green);
+  --color-warning: var(--ef-orange);
+  --color-warning-bg: #4a3e36;
+  --color-danger: var(--ef-red);
+  --color-danger-bg: var(--ef-bg-red);
 
   --color-chip-building-fg: #a8c7f0;
   --color-chip-building-bg: var(--ef-bg-blue);
-  --color-chip-path-fg:     var(--ef-orange);
-  --color-chip-path-bg:     var(--ef-bg-yellow);
-  --color-chip-poi-fg:      var(--ef-green);
-  --color-chip-poi-bg:      var(--ef-bg-green);
-  --color-chip-room-fg:     var(--ef-aqua);
-  --color-chip-room-bg:     var(--ef-bg-green);
+  --color-chip-path-fg: var(--ef-orange);
+  --color-chip-path-bg: var(--ef-bg-yellow);
+  --color-chip-poi-fg: var(--ef-green);
+  --color-chip-poi-bg: var(--ef-bg-green);
+  --color-chip-room-fg: var(--ef-aqua);
+  --color-chip-room-bg: var(--ef-bg-green);
   --color-chip-entrance-fg: var(--ef-yellow);
   --color-chip-entrance-bg: var(--ef-bg-yellow);
 
   --color-marker-building: #5a90e0;
-  --color-marker-room:     var(--ef-green);
+  --color-marker-room: var(--ef-green);
   --color-marker-entrance: var(--ef-orange);
-  --color-marker-path:     var(--ef-orange);
+  --color-marker-path: var(--ef-orange);
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.55);
@@ -90,94 +90,97 @@
 
 [data-theme="light"] {
   /* Everforest – light, medium (canonical values from sainnhe/everforest) */
-  --ef-bg-dim:    #efebd4;
-  --ef-bg0:       #fdf6e3;
-  --ef-bg1:       #f4f0d9;
-  --ef-bg2:       #efebd4;
-  --ef-bg3:       #e6e2cc;
-  --ef-bg4:       #e0dcc7;
-  --ef-bg5:       #bdc3af;
+  --ef-bg-dim: #efebd4;
+  --ef-bg0: #fdf6e3;
+  --ef-bg1: #f4f0d9;
+  --ef-bg2: #efebd4;
+  --ef-bg3: #e6e2cc;
+  --ef-bg4: #e0dcc7;
+  --ef-bg5: #bdc3af;
   --ef-bg-visual: #eaedc8;
-  --ef-bg-red:    #fbe3da;
-  --ef-bg-green:  #f0f1d2;
+  --ef-bg-red: #fbe3da;
+  --ef-bg-green: #f0f1d2;
   --ef-bg-yellow: #faedcd;
-  --ef-bg-blue:   #e9f0e9;
+  --ef-bg-blue: #e9f0e9;
 
-  --ef-fg:     #5c6a72;
-  --ef-grey0:  #a6b0a0;
-  --ef-grey1:  #939f91;
-  --ef-grey2:  #829181;
+  --ef-fg: #5c6a72;
+  --ef-grey0: #a6b0a0;
+  --ef-grey1: #939f91;
+  --ef-grey2: #829181;
 
-  --ef-red:    #f85552;
+  --ef-red: #f85552;
   --ef-orange: #f57d26;
   --ef-yellow: #dfa000;
-  --ef-green:  #8da101;
-  --ef-aqua:   #35a77c;
-  --ef-blue:   #3a94c5;
+  --ef-green: #8da101;
+  --ef-aqua: #35a77c;
+  --ef-blue: #3a94c5;
   --ef-purple: #df69ba;
 
-  --color-bg:            var(--ef-bg0);
-  --color-surface:       #ffffff;
-  --color-surface-alt:   var(--ef-bg1);
-  --color-surface-sunken:var(--ef-bg2);
+  --color-bg: var(--ef-bg0);
+  --color-surface: #ffffff;
+  --color-surface-alt: var(--ef-bg1);
+  --color-surface-sunken: var(--ef-bg2);
   --color-surface-hover: var(--ef-bg3);
-  --color-border:        var(--ef-bg4);
+  --color-border: var(--ef-bg4);
   --color-border-strong: var(--ef-bg5);
-  --color-divider:       var(--ef-bg3);
+  --color-divider: var(--ef-bg3);
 
-  --color-text:          var(--ef-fg);
-  --color-text-strong:   #384045;
-  --color-text-muted:    var(--ef-grey2);
-  --color-text-dim:      var(--ef-grey1);
+  --color-text: var(--ef-fg);
+  --color-text-strong: #384045;
+  --color-text-muted: var(--ef-grey2);
+  --color-text-dim: var(--ef-grey1);
 
-  --color-accent:        var(--ef-blue);
+  --color-accent: var(--ef-blue);
   --color-accent-strong: #1f7aa8;
-  --color-accent-bg:     var(--ef-bg-blue);
+  --color-accent-bg: var(--ef-bg-blue);
   --color-accent-contrast: #ffffff;
 
-  --color-success:       var(--ef-green);
-  --color-success-bg:    var(--ef-bg-green);
-  --color-warning:       var(--ef-orange);
-  --color-warning-bg:    var(--ef-bg-yellow);
-  --color-danger:        var(--ef-red);
-  --color-danger-bg:     var(--ef-bg-red);
+  --color-success: var(--ef-green);
+  --color-success-bg: var(--ef-bg-green);
+  --color-warning: var(--ef-orange);
+  --color-warning-bg: var(--ef-bg-yellow);
+  --color-danger: var(--ef-red);
+  --color-danger-bg: var(--ef-bg-red);
 
   --color-chip-building-fg: #1f4d8a;
   --color-chip-building-bg: var(--ef-bg-blue);
-  --color-chip-path-fg:     #8a4a10;
-  --color-chip-path-bg:     var(--ef-bg-yellow);
-  --color-chip-poi-fg:      #4f6a02;
-  --color-chip-poi-bg:      var(--ef-bg-green);
-  --color-chip-room-fg:     #256f56;
-  --color-chip-room-bg:     var(--ef-bg-green);
+  --color-chip-path-fg: #8a4a10;
+  --color-chip-path-bg: var(--ef-bg-yellow);
+  --color-chip-poi-fg: #4f6a02;
+  --color-chip-poi-bg: var(--ef-bg-green);
+  --color-chip-room-fg: #256f56;
+  --color-chip-room-bg: var(--ef-bg-green);
   --color-chip-entrance-fg: #8a4a10;
   --color-chip-entrance-bg: var(--ef-bg-yellow);
 
   --color-marker-building: #174ea6;
-  --color-marker-room:     #137333;
+  --color-marker-room: #137333;
   --color-marker-entrance: #8a4a10;
-  --color-marker-path:     #8a4a10;
+  --color-marker-path: #8a4a10;
 
   --shadow-1: 0 1px 2px rgba(60, 64, 67, 0.18);
-  --shadow-2: 0 2px 6px rgba(60, 64, 67, 0.18), 0 1px 2px rgba(60, 64, 67, 0.20);
-  --shadow-card: 0 1px 2px rgba(60, 64, 67, 0.28), 0 2px 6px rgba(60, 64, 67, 0.14);
+  --shadow-2: 0 2px 6px rgba(60, 64, 67, 0.18), 0 1px 2px rgba(60, 64, 67, 0.2);
+  --shadow-card:
+    0 1px 2px rgba(60, 64, 67, 0.28), 0 2px 6px rgba(60, 64, 67, 0.14);
 
   --marker-halo: rgba(255, 255, 255, 0.95);
 
   color-scheme: light;
 }
 
-/* ============================================================
- * Base
- * ============================================================ */
-
-html, body {
+Phtml,
+body {
   background: var(--color-bg);
   color: var(--color-text);
 }
 
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   margin: 1rem;
   line-height: 1.4;
 }
@@ -215,8 +218,12 @@ ul.flash {
   padding-left: 1.25rem;
 }
 
-.flash .error { color: var(--color-danger); }
-.flash .ok    { color: var(--color-success); }
+.flash .error {
+  color: var(--color-danger);
+}
+.flash .ok {
+  color: var(--color-success);
+}
 
 /* App shell: full-viewport maps-style layout */
 body.app-shell {
@@ -286,27 +293,74 @@ body.app-shell--map .flash {
   inset: 0;
 }
 
-/* ============================================================
- * Search card
- * ============================================================ */
-
 .search-overlay {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
   z-index: 1000;
-  max-width: min(28rem, 100%);
+  max-width: min(32rem, 100%);
   pointer-events: none;
 }
 
 .search-card {
   pointer-events: auto;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 3rem;
   background: var(--color-surface);
   color: var(--color-text);
   border-radius: 8px;
   box-shadow: var(--shadow-card);
   overflow: hidden;
+}
+
+.search-panel-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.search-panel-toggle {
+  flex: 0 0 auto;
+  width: 2.5rem;
+  min-height: 3rem;
+  border: none;
+  border-right: 1px solid var(--color-divider);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.search-panel-toggle:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+
+.search-panel-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.search-card--collapsed {
+  width: 2.5rem;
+  min-height: 3rem;
+}
+
+.search-card--collapsed .search-panel-content {
+  display: none;
+}
+
+.search-card--collapsed .search-panel-toggle {
+  border-right-color: transparent;
+}
+
+.search-card--collapsed .search-panel-toggle__icon {
+  transform: rotate(180deg);
 }
 
 .search-bar-row {
@@ -374,8 +428,13 @@ body.app-shell--map .flash {
   text-overflow: ellipsis;
 }
 
-.search-placeholder-cycle--exit { opacity: 0; }
-.search-placeholder-cycle--off { opacity: 0; visibility: hidden; }
+.search-placeholder-cycle--exit {
+  opacity: 0;
+}
+.search-placeholder-cycle--off {
+  opacity: 0;
+  visibility: hidden;
+}
 
 .search-icon-btn {
   flex-shrink: 0;
@@ -408,7 +467,9 @@ body.app-shell--map .flash {
   filter: brightness(1.1);
 }
 
-#search-voice-btn { position: relative; }
+#search-voice-btn {
+  position: relative;
+}
 
 .search-voice-btn__spinner {
   display: none;
@@ -426,11 +487,17 @@ body.app-shell--map .flash {
   color: var(--color-accent);
 }
 
-#search-voice-btn.search-voice-btn--processing .search-voice-btn__icon { display: none; }
-#search-voice-btn.search-voice-btn--processing .search-voice-btn__spinner { display: inline-block; }
+#search-voice-btn.search-voice-btn--processing .search-voice-btn__icon {
+  display: none;
+}
+#search-voice-btn.search-voice-btn--processing .search-voice-btn__spinner {
+  display: inline-block;
+}
 
 @keyframes search-voice-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .search-results {
@@ -495,7 +562,9 @@ body.app-shell--map .flash {
   word-break: break-word;
 }
 
-.search-result__title strong { font-weight: 600; }
+.search-result__title strong {
+  font-weight: 600;
+}
 
 .search-result__sub {
   font-size: 0.8125rem;
@@ -520,18 +589,46 @@ body.app-shell--map .flash {
   padding: 0.125rem 0.5rem;
 }
 
-.search-result__kind--building { background: var(--color-chip-building-bg); color: var(--color-chip-building-fg); }
-.search-result__kind--path     { background: var(--color-chip-path-bg);     color: var(--color-chip-path-fg); }
-.search-result__kind--poi      { background: var(--color-chip-poi-bg);      color: var(--color-chip-poi-fg); }
-.search-result__kind--room     { background: var(--color-chip-room-bg);     color: var(--color-chip-room-fg); }
-.search-result__kind--entrance { background: var(--color-chip-entrance-bg); color: var(--color-chip-entrance-fg); }
+.search-result__kind--building {
+  background: var(--color-chip-building-bg);
+  color: var(--color-chip-building-fg);
+}
+.search-result__kind--path {
+  background: var(--color-chip-path-bg);
+  color: var(--color-chip-path-fg);
+}
+.search-result__kind--poi {
+  background: var(--color-chip-poi-bg);
+  color: var(--color-chip-poi-fg);
+}
+.search-result__kind--room {
+  background: var(--color-chip-room-bg);
+  color: var(--color-chip-room-fg);
+}
+.search-result__kind--entrance {
+  background: var(--color-chip-entrance-bg);
+  color: var(--color-chip-entrance-fg);
+}
 
 /* Small colored dot markers for result rows. */
-.search-result__icon--building { background: var(--color-marker-building); border-radius: 2px; }
-.search-result__icon--room     { background: var(--color-marker-room); }
-.search-result__icon--entrance { background: var(--color-marker-entrance); border-radius: 0; }
-.search-result__icon--poi      { background: var(--color-marker-room); }
-.search-result__icon--path     { background: var(--color-marker-path); border-radius: 1px; }
+.search-result__icon--building {
+  background: var(--color-marker-building);
+  border-radius: 2px;
+}
+.search-result__icon--room {
+  background: var(--color-marker-room);
+}
+.search-result__icon--entrance {
+  background: var(--color-marker-entrance);
+  border-radius: 0;
+}
+.search-result__icon--poi {
+  background: var(--color-marker-room);
+}
+.search-result__icon--path {
+  background: var(--color-marker-path);
+  border-radius: 1px;
+}
 
 /* Rooms nested under a matched building render one level indented. */
 .search-result--child {
@@ -542,7 +639,9 @@ body.app-shell--map .flash {
 .search-result--child:focus {
   background: var(--color-surface-hover);
 }
-.search-result--child .search-result__icon { opacity: 0.85; }
+.search-result--child .search-result__icon {
+  opacity: 0.85;
+}
 
 .search-result--more {
   cursor: default;
@@ -560,7 +659,9 @@ body.map-view {
   overflow: hidden;
 }
 
-body.map-view header.app-topbar { display: none; }
+body.map-view header.app-topbar {
+  display: none;
+}
 
 body.map-view main {
   max-width: none;
@@ -585,7 +686,9 @@ body.map-view #map {
  * ============================================================ */
 
 [data-theme] .maplibregl-popup-content {
-  font: 13px/1.35 system-ui, sans-serif;
+  font:
+    13px/1.35 system-ui,
+    sans-serif;
   padding: 0.5rem 0.7rem;
   max-width: 22rem;
   background: var(--color-surface);
@@ -656,9 +759,13 @@ body.map-view #map {
   color: var(--color-accent);
   border-radius: 6px;
   padding: 0.35rem 0.55rem;
-  font: 600 12px/1.2 system-ui, sans-serif;
+  font:
+    600 12px/1.2 system-ui,
+    sans-serif;
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
 [data-theme] .maplibregl-popup-content .popup-action:hover,
@@ -731,11 +838,21 @@ body.map-view #map {
   filter: invert(0.88) hue-rotate(180deg);
 }
 
+/* Push the top-right controls below the search overlay on narrow screens
+   so the search card doesn't cover the zoom / 3D buttons. */
+@media (max-width: 640px) {
+  .maplibregl-ctrl-top-right {
+    padding-top: calc(2.75rem + max(8px, env(safe-area-inset-top)) + 12px);
+  }
+}
+
 /* Custom 3D / tilt toggle that sits with the nav controls. */
 .pitch-toggle button {
   width: 29px;
   height: 29px;
-  font: 600 11px/1 system-ui, sans-serif;
+  font:
+    600 11px/1 system-ui,
+    sans-serif;
   letter-spacing: 0.5px;
   background: var(--color-surface);
   color: var(--color-text);
@@ -743,17 +860,15 @@ body.map-view #map {
   cursor: pointer;
 }
 
-.pitch-toggle button:hover { background: var(--color-surface-hover); }
+.pitch-toggle button:hover {
+  background: var(--color-surface-hover);
+}
 
 .pitch-toggle.active button,
 .pitch-toggle button.active {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
 }
-
-/* ============================================================
- * Directions mode (inside the search card)
- * ============================================================ */
 
 .directions-header {
   display: flex;
@@ -803,8 +918,12 @@ body.map-view #map {
   color: var(--color-text-muted);
 }
 
-.directions-marker--from { color: var(--color-success); }
-.directions-marker--to   { color: var(--color-danger); }
+.directions-marker--from {
+  color: var(--color-success);
+}
+.directions-marker--to {
+  color: var(--color-danger);
+}
 
 .directions-input {
   flex: 1;
@@ -818,7 +937,9 @@ body.map-view #map {
   padding: 0.25rem 0;
 }
 
-.directions-input::placeholder { color: var(--color-text-muted); }
+.directions-input::placeholder {
+  color: var(--color-text-muted);
+}
 
 .directions-field-clear {
   flex-shrink: 0;
@@ -898,7 +1019,9 @@ body.map-view #map {
   font: inherit;
   font-weight: 500;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .directions-actions button:hover:not(:disabled) {
@@ -938,7 +1061,10 @@ body.map-view #map {
   font-size: 0.75rem;
   color: var(--color-text-muted);
 }
-.directions-pref input { margin: 0; accent-color: var(--color-accent); }
+.directions-pref input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
 
 .directions-endpoint {
   grid-column: 1;
@@ -963,7 +1089,9 @@ body.map-view #map {
   line-height: 1.2;
 }
 
-.directions-scope[hidden] { display: none; }
+.directions-scope[hidden] {
+  display: none;
+}
 
 .directions-scope__label {
   overflow: hidden;
@@ -1022,13 +1150,17 @@ body.map-view #map {
   background: var(--color-text-muted);
 }
 
-.indoor-result--building .indoor-result__icon { background: var(--color-marker-building); border-radius: 2px; }
-.indoor-result--room     .indoor-result__icon { background: var(--color-marker-room); }
-.indoor-result--entrance .indoor-result__icon { background: var(--color-marker-entrance); border-radius: 0; }
-
-/* ============================================================
- * Map right-click context menu
- * ============================================================ */
+.indoor-result--building .indoor-result__icon {
+  background: var(--color-marker-building);
+  border-radius: 2px;
+}
+.indoor-result--room .indoor-result__icon {
+  background: var(--color-marker-room);
+}
+.indoor-result--entrance .indoor-result__icon {
+  background: var(--color-marker-entrance);
+  border-radius: 0;
+}
 
 .map-context-menu {
   position: fixed;
@@ -1041,10 +1173,14 @@ body.map-view #map {
   min-width: 12rem;
   display: flex;
   flex-direction: column;
-  font: 13px/1.35 system-ui, sans-serif;
+  font:
+    13px/1.35 system-ui,
+    sans-serif;
 }
 
-.map-context-menu[hidden] { display: none; }
+.map-context-menu[hidden] {
+  display: none;
+}
 
 .map-context-menu button {
   border: none;
@@ -1061,10 +1197,6 @@ body.map-view #map {
   background: var(--color-surface-hover);
   outline: none;
 }
-
-/* ============================================================
- * Step-by-step turn list
- * ============================================================ */
 
 .directions-steps {
   list-style: none;
@@ -1113,10 +1245,20 @@ body.map-view #map {
   letter-spacing: 0.03em;
   font-weight: 700;
 }
-.step__chip--indoor  { background: var(--color-success); color: var(--color-accent-contrast); }
-.step__chip--outdoor { background: var(--color-accent);  color: var(--color-accent-contrast); }
+.step__chip--indoor {
+  background: var(--color-success);
+  color: var(--color-accent-contrast);
+}
+.step__chip--outdoor {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
 
-.step__summary, .step__text { flex: 1; min-width: 0; }
+.step__summary,
+.step__text {
+  flex: 1;
+  min-width: 0;
+}
 
 .step__turn {
   flex-shrink: 0;
@@ -1129,10 +1271,18 @@ body.map-view #map {
   color: var(--color-accent-contrast);
   background: var(--color-text-muted);
 }
-.step__turn--left     { background: var(--color-accent); }
-.step__turn--right    { background: var(--color-warning); }
-.step__turn--straight { background: var(--color-text-muted); }
-.step__turn--back     { background: var(--color-danger); }
+.step__turn--left {
+  background: var(--color-accent);
+}
+.step__turn--right {
+  background: var(--color-warning);
+}
+.step__turn--straight {
+  background: var(--color-text-muted);
+}
+.step__turn--back {
+  background: var(--color-danger);
+}
 
 .phase-badge {
   display: inline-block;
@@ -1146,15 +1296,19 @@ body.map-view #map {
   letter-spacing: 0.02em;
 }
 
-.step--change_floor    { background: var(--color-warning-bg); }
-.step--exit_connector  { background: var(--color-warning-bg); }
-.step--arrive          { font-weight: 500; }
+.step--change_floor {
+  background: var(--color-warning-bg);
+}
+.step--exit_connector {
+  background: var(--color-warning-bg);
+}
+.step--arrive {
+  font-weight: 500;
+}
 .step--enter_building,
-.step--exit_building   { background: var(--color-accent-bg); }
-
-/* ============================================================
- * On-map markers for connectors/doors
- * ============================================================ */
+.step--exit_building {
+  background: var(--color-accent-bg);
+}
 
 .step__icon {
   flex-shrink: 0;
@@ -1166,7 +1320,9 @@ body.map-view #map {
   margin-top: -0.1rem;
   border-radius: 4px;
 }
-.step__icon svg { display: block; }
+.step__icon svg {
+  display: block;
+}
 
 .mm-route-marker {
   width: 28px;
@@ -1184,13 +1340,21 @@ body.map-view #map {
   color: var(--color-text-strong);
 }
 
-.mm-route-marker--door     { box-shadow: var(--shadow-1), 0 0 0 2px #5a9fff; }
-.mm-route-marker--stairs   { box-shadow: var(--shadow-1), 0 0 0 2px #daa520; }
-.mm-route-marker--elevator { box-shadow: var(--shadow-1), 0 0 0 2px #e74c3c; }
-
-/* ============================================================
- * Theme toggle
- * ============================================================ */
+.mm-route-marker--door {
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 2px #5a9fff;
+}
+.mm-route-marker--stairs {
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 2px #daa520;
+}
+.mm-route-marker--elevator {
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 2px #e74c3c;
+}
 
 .theme-toggle {
   --tt-track-w: 2.6rem;
@@ -1216,7 +1380,9 @@ body.map-view #map {
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  transition: background 180ms ease, border-color 180ms ease;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
   box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
 }
@@ -1237,11 +1403,11 @@ body.map-view #map {
   box-shadow: var(--shadow-1);
   display: grid;
   place-items: center;
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
-              background 180ms ease, color 180ms ease;
-  transform: translateX(
-    calc(var(--tt-track-w) - var(--tt-track-h))
-  );
+  transition:
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    background 180ms ease,
+    color 180ms ease;
+  transform: translateX(calc(var(--tt-track-w) - var(--tt-track-h)));
 }
 
 [data-theme="light"] .theme-toggle__thumb {
@@ -1255,8 +1421,12 @@ body.map-view #map {
 }
 
 /* Sun shown in light mode, moon in dark — driven by the theme attr. */
-[data-theme="light"] .theme-toggle__icon--moon { display: none; }
-[data-theme="dark"]  .theme-toggle__icon--sun  { display: none; }
+[data-theme="light"] .theme-toggle__icon--moon {
+  display: none;
+}
+[data-theme="dark"] .theme-toggle__icon--sun {
+  display: none;
+}
 
 .theme-toggle--floating {
   position: absolute;
@@ -1280,16 +1450,25 @@ body.map-view #map {
   outline-offset: 2px;
 }
 
-/* ============================================================
- * Mobile + small-viewport tweaks
- * ============================================================ */
-
 @media (max-width: 640px) {
   .search-overlay {
     max-width: none;
     top: max(8px, env(safe-area-inset-top));
     left: max(8px, env(safe-area-inset-left));
     right: max(8px, env(safe-area-inset-right));
+  }
+
+  .search-panel-toggle {
+    width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .search-card {
+    min-height: 2.75rem;
+  }
+
+  .search-card--collapsed {
+    min-height: 2.75rem;
   }
 
   .search-bar-row {
@@ -1312,16 +1491,24 @@ body.map-view #map {
     padding: 0.3rem 0.5rem;
   }
 
-  .directions-field-clear { width: 2rem; height: 2rem; }
+  .directions-field-clear {
+    width: 2rem;
+    height: 2rem;
+  }
 
-  .directions-swap-btn { width: 2.4rem; height: 2.4rem; }
+  .directions-swap-btn {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
 
   .directions-steps {
     max-height: min(18rem, 38vh);
     max-height: min(18rem, 38dvh);
   }
 
-  .step { padding: 0.5rem 0.7rem; }
+  .step {
+    padding: 0.5rem 0.7rem;
+  }
 
   .directions-actions button {
     padding: 0.6rem 0.6rem;
@@ -1338,7 +1525,10 @@ body.map-view #map {
     width: 24px;
     height: 24px;
   }
-  .mm-route-marker svg { width: 18px; height: 18px; }
+  .mm-route-marker svg {
+    width: 18px;
+    height: 18px;
+  }
 
   .theme-toggle--floating {
     right: max(10px, env(safe-area-inset-right));
@@ -1347,8 +1537,12 @@ body.map-view #map {
 }
 
 @media (max-width: 380px) {
-  .directions-pref span { display: none; }
-  .directions-header__title { font-size: 0.875rem; }
+  .directions-pref span {
+    display: none;
+  }
+  .directions-header__title {
+    font-size: 0.875rem;
+  }
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
@@ -1356,7 +1550,9 @@ body.map-view #map {
     max-height: min(10rem, 45vh);
     max-height: min(10rem, 45dvh);
   }
-  .directions-field { min-height: 2.1rem; }
+  .directions-field {
+    min-height: 2.1rem;
+  }
 }
 
 @media (pointer: coarse) {
@@ -1364,7 +1560,13 @@ body.map-view #map {
     padding: 0.75rem 1rem;
     font-size: 0.9rem;
   }
-  .directions-actions button { min-height: 2.75rem; }
-  .search-result { padding: 0.85rem 1rem; }
-  .indoor-result { padding: 0.7rem 0.8rem; }
+  .directions-actions button {
+    min-height: 2.75rem;
+  }
+  .search-result {
+    padding: 0.85rem 1rem;
+  }
+  .indoor-result {
+    padding: 0.7rem 0.8rem;
+  }
 }

@@ -2,8 +2,23 @@
 
 google maps for marist.
 
-A MapLibre + Flask app over a PostGIS/osm2pgsql + martin tile pipeline,
-with a langchain-powered nav agent on top.
+Maristmaps pairs a MapLibre frontend with a Flask backend. Campus data
+flows through PostGIS and osm2pgsql into Martin for vector tiles, with a
+LangChain-powered agent for conversational routing on top.
+
+**Best Overall Project** — Marist Hackathon, Spring 2026.
+
+## Problem statement
+
+The current Marist campus map only shows you where buildings are and google maps is unable to provde specific
+building to building navigation. `maristmaps` focuses on a campus-first experience with a dedicated tile
+pipeline and structured indoor location data so users can get from point to point with clear context.
+
+Primary users include:
+
+- Blind or low-vision individuals who need better navigation support.
+- People unfamiliar with Marist (guests, speakers, parents, new students).
+- Students and staff who need fast room/building lookup and routing.
 
 ## Quick start (local dev)
 
@@ -36,7 +51,7 @@ re-import.
 ```
 
 Full walkthrough — DNS, Caddy auto-TLS, day-two ops, troubleshooting —
-is in [`deploy.md`](./deploy.md).
+is in [`deploy/deploy.md`](./deploy/deploy.md).
 
 ## Layout
 
@@ -49,7 +64,7 @@ martin/            martin tile server config
 pbf/               OSM PBF extracts (mounted into the init container)
 scripts/           init.sh (unified bootstrap), load-osm.sh (legacy)
 docker-compose.yml base stack (db + martin + init + web)
-docker-compose.prod.yml  adds caddy for HTTPS
+deploy/            deployment overlay compose + deployment walkthrough
 run.py             Flask dev server entrypoint (host-side)
 wsgi.py            Gunicorn entrypoint (in the web container)
 ```
@@ -59,24 +74,24 @@ wsgi.py            Gunicorn entrypoint (in the web container)
 Everything lives in `.env`. See `.env.example` for the full annotated
 list. In short:
 
-| var                 | purpose                                          |
-|---------------------|--------------------------------------------------|
-| `SECRET_KEY`        | Flask session signing                            |
-| `OPENAI_API_KEY`    | langchain agent                                  |
-| `DATABASE_URL`      | postgres conn string (SQLAlchemy form)           |
-| `MARTIN_PUBLIC_URL` | tile server URL as the BROWSER sees it           |
-| `DOMAIN`            | (prod) subdomain for Caddy TLS                   |
-| `ACME_EMAIL`        | (prod) Let's Encrypt registration email          |
+| var                 | purpose                                 |
+| ------------------- | --------------------------------------- |
+| `SECRET_KEY`        | Flask session signing                   |
+| `OPENAI_API_KEY`    | langchain agent                         |
+| `DATABASE_URL`      | postgres conn string (SQLAlchemy form)  |
+| `MARTIN_PUBLIC_URL` | tile server URL as the BROWSER sees it  |
+| `DOMAIN`            | (prod) subdomain for Caddy TLS          |
+| `ACME_EMAIL`        | (prod) Let's Encrypt registration email |
 
 ## Services
 
-| service | port (dev) | role                                             |
-|---------|------------|--------------------------------------------------|
-| db      | 5432       | postgis: osm2pgsql tables + `locations`          |
-| martin  | 3000       | vector tile server over planet_osm_*             |
-| init    | —          | one-shot: osm2pgsql + `db/load_data.py`          |
-| web     | 8000       | gunicorn + Flask (prod only; dev uses `run.py`)  |
-| caddy   | 80/443     | prod only: TLS + reverse proxy                   |
+| service | port (dev) | role                                            |
+| ------- | ---------- | ----------------------------------------------- |
+| db      | 5432       | postgis: osm2pgsql tables + `locations`         |
+| martin  | 3000       | vector tile server over planet*osm*\*           |
+| init    | —          | one-shot: osm2pgsql + `db/load_data.py`         |
+| web     | 8000       | gunicorn + Flask (prod only; dev uses `run.py`) |
+| caddy   | 80/443     | prod only: TLS + reverse proxy                  |
 
 ## Tools
 
@@ -84,10 +99,10 @@ Two internal tools for building out the indoor dataset. Not linked from
 the public header — reachable by direct URL only, so drop them into
 your browser when you need them.
 
-| tool             | route            | role                                             |
-|------------------|------------------|--------------------------------------------------|
-| survey (GeoLog)  | `/tools/survey`  | mobile GPS logger for field surveying            |
-| edit (csv viz)   | `/tools/edit`    | desktop CSV editor for cleanup + hallway graphs  |
+| tool            | route           | role                                            |
+| --------------- | --------------- | ----------------------------------------------- |
+| survey (GeoLog) | `/tools/survey` | mobile GPS logger for field surveying           |
+| edit (csv viz)  | `/tools/edit`   | desktop CSV editor for cleanup + hallway graphs |
 
 Typical workflow: walk a building with `/tools/survey` on your phone,
 logging rooms / entrances / stairs / elevators against live GPS. It
@@ -99,3 +114,15 @@ map page, so the Martin URL, campus center, and zoom stay in sync.
 
 Once the CSV looks right, save it into `db/buildings/` and re-run
 `./scripts/init.sh` (or `--prod`) to reload the `locations` table.
+
+## Future ideas
+
+- Add schedule-aware routing (for example via CalDAV or a student schedule feed).
+- Add agent workflows for class-to-class route planning and timing suggestions.
+
+Related references:
+
+- [PostGIS](https://postgis.net/)
+- [Martin](https://martin.maplibre.org/)
+- [MapLibre GL JS docs](https://maplibre.org/maplibre-gl-js/docs/)
+- [h3-py](https://github.com/uber/h3-py)

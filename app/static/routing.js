@@ -18,20 +18,12 @@
  * Waits for `MaristMap.ready` before touching the map.
  */
 (function () {
-  const ROUTE_SOURCE = 'mm-route';
-  const ROUTE_CASING_LAYER = 'mm-route-casing';
-  const ROUTE_LINE_LAYER = 'mm-route-line';
-  const ROUTE_ENDPOINTS_SOURCE = 'mm-route-endpoints';
-  const ROUTE_ENDPOINTS_LAYER = 'mm-route-endpoints-layer';
+  const ROUTE_SOURCE = "mm-route";
+  const ROUTE_CASING_LAYER = "mm-route-casing";
+  const ROUTE_LINE_LAYER = "mm-route-line";
+  const ROUTE_ENDPOINTS_SOURCE = "mm-route-endpoints";
+  const ROUTE_ENDPOINTS_LAYER = "mm-route-endpoints-layer";
 
-  // ---- 3D altitude config ---------------------------------------------
-  //
-  // Mental model: floor 1 (the ground floor) sits at z=0, same as the
-  // outdoor ground plane. Floor N sits at (N-1) * FLOOR_HEIGHT_M. Floor
-  // 0 (basement) is below ground at -FLOOR_HEIGHT_M. This keeps the
-  // route flat through indoor-outdoor-indoor transitions at ground-floor
-  // entrances — no weird pops at doors. Altitude changes only happen at
-  // stairwell/elevator connectors, and at the rare basement entrance.
   const FLOOR_HEIGHT_M = 2.75;
   const GROUND_ALT_M = 0;
 
@@ -44,11 +36,11 @@
   }
 
   const state = {
-    from: null,    // { lon, lat, label }
-    to: null,      // { lon, lat, label }
-    route: null,   // server response from /api/route
+    from: null, // { lon, lat, label }
+    to: null, // { lon, lat, label }
+    route: null, // server response from /api/route
     inflight: null, // AbortController for the current /api/route call
-    in3d: false,   // mirrors map.js's pitch-based 3D toggle
+    in3d: false, // mirrors map.js's pitch-based 3D toggle
   };
 
   let _map = null;
@@ -56,49 +48,59 @@
   function ensureLayers(map) {
     if (!map.getSource(ROUTE_SOURCE)) {
       map.addSource(ROUTE_SOURCE, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
       });
     }
     if (!map.getSource(ROUTE_ENDPOINTS_SOURCE)) {
       map.addSource(ROUTE_ENDPOINTS_SOURCE, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
       });
     }
     if (!map.getLayer(ROUTE_CASING_LAYER)) {
       map.addLayer({
-        id: ROUTE_CASING_LAYER, type: 'line', source: ROUTE_SOURCE,
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        id: ROUTE_CASING_LAYER,
+        type: "line",
+        source: ROUTE_SOURCE,
+        layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          'line-color': '#ffffff',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 19, 11],
-          'line-opacity': 0.9,
+          "line-color": "#ffffff",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 4, 19, 11],
+          "line-opacity": 0.9,
         },
       });
     }
     if (!map.getLayer(ROUTE_LINE_LAYER)) {
       map.addLayer({
-        id: ROUTE_LINE_LAYER, type: 'line', source: ROUTE_SOURCE,
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        id: ROUTE_LINE_LAYER,
+        type: "line",
+        source: ROUTE_SOURCE,
+        layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          'line-color': '#1a73e8',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 19, 7],
+          "line-color": "#1a73e8",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2, 19, 7],
         },
       });
     }
     if (!map.getLayer(ROUTE_ENDPOINTS_LAYER)) {
       map.addLayer({
-        id: ROUTE_ENDPOINTS_LAYER, type: 'circle', source: ROUTE_ENDPOINTS_SOURCE,
+        id: ROUTE_ENDPOINTS_LAYER,
+        type: "circle",
+        source: ROUTE_ENDPOINTS_SOURCE,
         paint: {
-          'circle-radius': 7,
-          'circle-color': [
-            'match', ['get', 'role'],
-            'from', '#34a853', 'to', '#ea4335',
-            '#1a73e8',
+          "circle-radius": 7,
+          "circle-color": [
+            "match",
+            ["get", "role"],
+            "from",
+            "#34a853",
+            "to",
+            "#ea4335",
+            "#1a73e8",
           ],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
         },
       });
     }
@@ -113,36 +115,39 @@
     const pts = state.route && state.route.trackpoints;
     if (pts && pts.length >= 2) {
       features.push({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: pts[0] },
-        properties: { role: 'from' },
+        type: "Feature",
+        geometry: { type: "Point", coordinates: pts[0] },
+        properties: { role: "from" },
       });
       features.push({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: pts[pts.length - 1] },
-        properties: { role: 'to' },
+        type: "Feature",
+        geometry: { type: "Point", coordinates: pts[pts.length - 1] },
+        properties: { role: "to" },
       });
     } else {
       if (state.from) {
         features.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [state.from.lon, state.from.lat] },
-          properties: { role: 'from' },
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [state.from.lon, state.from.lat],
+          },
+          properties: { role: "from" },
         });
       }
       if (state.to) {
         features.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [state.to.lon, state.to.lat] },
-          properties: { role: 'to' },
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [state.to.lon, state.to.lat],
+          },
+          properties: { role: "to" },
         });
       }
     }
-    return { type: 'FeatureCollection', features };
+    return { type: "FeatureCollection", features };
   }
-
-  // ---- connector / door markers ---------------------------------------
-
 
   const connectorMarkers = [];
 
@@ -154,14 +159,14 @@
   }
 
   function stepWarrantsMapMarker(step, isFirstStep, isLastStep) {
-    if (isFirstStep) return false;         // overlaps start dot
-    if (isLastStep) return false;          // overlaps end dot
-    if (step.kind === 'exit_connector') return false; // shares pt w/ change_floor
-    if (step.kind === 'exit_room') return false;      // shares room point; rare
+    if (isFirstStep) return false; // overlaps start dot
+    if (isLastStep) return false; // overlaps end dot
+    if (step.kind === "exit_connector") return false; // shares pt w/ change_floor
+    if (step.kind === "exit_room") return false; // shares room point; rare
     switch (step.kind) {
-      case 'change_floor':
-      case 'enter_building':
-      case 'exit_building':
+      case "change_floor":
+      case "enter_building":
+      case "exit_building":
         return true;
       default:
         return false;
@@ -179,7 +184,7 @@
     // Flatten steps with a running first/last marker so the renderer
     const allSteps = [];
     for (const phase of route.phases) {
-      for (const step of (phase.steps || [])) allSteps.push(step);
+      for (const step of phase.steps || []) allSteps.push(step);
     }
     allSteps.forEach((step, i) => {
       const isFirst = i === 0;
@@ -190,19 +195,18 @@
       const iconName = indoor.iconNameForStep(step);
       if (!iconName) return;
 
-      const el = document.createElement('div');
+      const el = document.createElement("div");
       el.className = `mm-route-marker mm-route-marker--${iconName}`;
       el.innerHTML = indoor.icons[iconName](22);
       el.title = step.text || iconName;
 
-      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat(pt)
         .addTo(_map);
       connectorMarkers.push(marker);
     });
   }
 
-  // ---- Z-assignment pass ----------------------------------------------
   //
   // Walks the route's phases and produces a structure that MaristRoute3D
   // can consume directly. Each `segment` is a polyline of [lon, lat, zM]
@@ -255,7 +259,6 @@
       });
     };
 
-    // --- Pass 1: compute each phase's altitude profile ---
     //
     // Every non-skip phase ends up with { startZ, endZ } describing what
     // altitude the route is at when entering and leaving that phase.
@@ -269,19 +272,20 @@
     // The only places altitude visibly changes are stairwell/elevator
     // connectors and (rarely) basement-level outdoor entrances.
     const profiles = route.phases.map((phase) => {
-      if (!phase || phase.error) return { kind: 'skip' };
-      if (phase.kind === 'outdoor') {
-        return { kind: 'outdoor' }; // startZ / endZ resolved next
+      if (!phase || phase.error) return { kind: "skip" };
+      if (phase.kind === "outdoor") {
+        return { kind: "outdoor" }; // startZ / endZ resolved next
       }
-      if (phase.kind !== 'indoor') return { kind: 'skip' };
+      if (phase.kind !== "indoor") return { kind: "skip" };
 
       const steps = Array.isArray(phase.steps) ? phase.steps : [];
-      const isBridge = steps.length === 1 && steps[0] && steps[0].kind === 'bridge';
+      const isBridge =
+        steps.length === 1 && steps[0] && steps[0].kind === "bridge";
       if (isBridge) {
-        return { kind: 'bridge' }; // startZ / endZ resolved next
+        return { kind: "bridge" }; // startZ / endZ resolved next
       }
       return {
-        kind: 'indoor',
+        kind: "indoor",
         startZ: altForFloor(phase.from_floor),
         endZ: altForFloor(phase.to_floor),
       };
@@ -293,38 +297,42 @@
     const prevResolvedEndZ = (idx) => {
       for (let j = idx - 1; j >= 0; j--) {
         const p = profiles[j];
-        if (p.kind === 'indoor') return p.endZ;
-        if ((p.kind === 'outdoor' || p.kind === 'bridge')
-            && p.endZ !== undefined) return p.endZ;
+        if (p.kind === "indoor") return p.endZ;
+        if (
+          (p.kind === "outdoor" || p.kind === "bridge") &&
+          p.endZ !== undefined
+        )
+          return p.endZ;
       }
       return null;
     };
     const nextResolvedStartZ = (idx) => {
       for (let j = idx + 1; j < profiles.length; j++) {
         const p = profiles[j];
-        if (p.kind === 'indoor') return p.startZ;
+        if (p.kind === "indoor") return p.startZ;
       }
       return null;
     };
     for (let i = 0; i < profiles.length; i++) {
       const p = profiles[i];
-      if (p.kind !== 'bridge' && p.kind !== 'outdoor') continue;
+      if (p.kind !== "bridge" && p.kind !== "outdoor") continue;
       let sz = prevResolvedEndZ(i);
       let ez = nextResolvedStartZ(i);
-      if (sz === null && ez === null) { sz = GROUND_ALT_M; ez = GROUND_ALT_M; }
-      else if (sz === null) sz = ez;
+      if (sz === null && ez === null) {
+        sz = GROUND_ALT_M;
+        ez = GROUND_ALT_M;
+      } else if (sz === null) sz = ez;
       else if (ez === null) ez = sz;
       p.startZ = sz;
       p.endZ = ez;
     }
 
-    // --- Pass 2: emit segments ---
     for (let i = 0; i < route.phases.length; i++) {
       const phase = route.phases[i];
       const profile = profiles[i];
-      if (!phase || !profile || profile.kind === 'skip') continue;
+      if (!phase || !profile || profile.kind === "skip") continue;
 
-      if (profile.kind === 'outdoor') {
+      if (profile.kind === "outdoor") {
         // Outdoor polyline sits at the altitude of the entrances it
         // connects (usually floor 1 = z=0). If the two ends somehow
         // differ (e.g. basement entrance on one side), we split the
@@ -344,7 +352,7 @@
         continue;
       }
 
-      if (profile.kind === 'bridge') {
+      if (profile.kind === "bridge") {
         // A bridge has exactly two points: A (entering side, e.g. Rotunda
         // Midrise Entrance) and B (exiting side, e.g. Midrise Rotunda
         // Entrance). Each side has its OWN floor in its home building
@@ -411,7 +419,7 @@
       for (const step of steps) {
         if (!step) continue;
         const sp = Array.isArray(step.polyline) ? step.polyline : [];
-        if (step.kind === 'change_floor') {
+        if (step.kind === "change_floor") {
           connectorPt = sp[0] || null;
           passedConnector = true;
           continue; // the jump is emitted below, not as a bucket push
@@ -431,11 +439,19 @@
       // so the three pieces (leg1, vertical, leg2) join cleanly in
       // (lon,lat) space — only the z changes at the stair.
       const last1 = leg1[leg1.length - 1];
-      if (!last1 || last1[0] !== connectorPt[0] || last1[1] !== connectorPt[1]) {
+      if (
+        !last1 ||
+        last1[0] !== connectorPt[0] ||
+        last1[1] !== connectorPt[1]
+      ) {
         leg1.push(connectorPt);
       }
       const first2 = leg2[0];
-      if (!first2 || first2[0] !== connectorPt[0] || first2[1] !== connectorPt[1]) {
+      if (
+        !first2 ||
+        first2[0] !== connectorPt[0] ||
+        first2[1] !== connectorPt[1]
+      ) {
         leg2.unshift(connectorPt);
       }
 
@@ -444,7 +460,6 @@
       pushConstAlt(leg2, toZ);
     }
 
-    // --- Pass 3: stitch indoor↔outdoor transitions ---
     //
     // At a building entrance, the indoor phase ends at floor-1 altitude
     // (≈2.75 m) while the adjoining outdoor phase is at ground (0 m). If
@@ -461,10 +476,9 @@
         const curr = segments[i].coords;
         const prevEnd = prev[prev.length - 1];
         const currStart = curr[0];
-        const sameXY = (
-          Math.abs(prevEnd[0] - currStart[0]) < 1e-9
-          && Math.abs(prevEnd[1] - currStart[1]) < 1e-9
-        );
+        const sameXY =
+          Math.abs(prevEnd[0] - currStart[0]) < 1e-9 &&
+          Math.abs(prevEnd[1] - currStart[1]) < 1e-9;
         const zGap = Math.abs(prevEnd[2] - currStart[2]);
         if (sameXY && zGap > 1e-6) {
           stitched.push({
@@ -496,21 +510,22 @@
     return { segments, endpoints: { start: startPt, end: endPt } };
   }
 
-  // ---- flat/3D visibility toggle --------------------------------------
-
   function applyRouteVisibility() {
     if (!_map) return;
     const show2d = !state.in3d;
     // Flat layers: show only when NOT in 3D
     const setVis = (id, visible) => {
       if (!_map.getLayer(id)) return;
-      _map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+      _map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
     };
     setVis(ROUTE_CASING_LAYER, show2d);
     setVis(ROUTE_LINE_LAYER, show2d);
     setVis(ROUTE_ENDPOINTS_LAYER, show2d);
     // 3D layer: opposite
-    if (window.MaristRoute3D && typeof window.MaristRoute3D.setVisible === 'function') {
+    if (
+      window.MaristRoute3D &&
+      typeof window.MaristRoute3D.setVisible === "function"
+    ) {
       window.MaristRoute3D.setVisible(!show2d);
     }
   }
@@ -538,11 +553,11 @@
     if (routeSrc) {
       if (state.route && state.route.feature) {
         routeSrc.setData({
-          type: 'FeatureCollection',
+          type: "FeatureCollection",
           features: [state.route.feature],
         });
       } else {
-        routeSrc.setData({ type: 'FeatureCollection', features: [] });
+        routeSrc.setData({ type: "FeatureCollection", features: [] });
       }
     }
     addConnectorMarkers();
@@ -562,27 +577,43 @@
       if (lat < minLat) minLat = lat;
       if (lat > maxLat) maxLat = lat;
     }
-    _map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
-      padding: 80, maxZoom: 19, duration: 600,
-    });
+    _map.fitBounds(
+      [
+        [minLon, minLat],
+        [maxLon, maxLat],
+      ],
+      {
+        padding: 80,
+        maxZoom: 19,
+        duration: 600,
+      },
+    );
   }
 
   function emitChange(extra) {
-    document.dispatchEvent(new CustomEvent('mmap:route-changed', {
-      detail: {
-        from: state.from && { ...state.from },
-        to: state.to && { ...state.to },
-        route: state.route && { ...state.route },
-        ...(extra || {}),
-      },
-    }));
-    if (window.MaristIndoor && typeof window.MaristIndoor.renderSteps === 'function') {
+    document.dispatchEvent(
+      new CustomEvent("mmap:route-changed", {
+        detail: {
+          from: state.from && { ...state.from },
+          to: state.to && { ...state.to },
+          route: state.route && { ...state.route },
+          ...(extra || {}),
+        },
+      }),
+    );
+    if (
+      window.MaristIndoor &&
+      typeof window.MaristIndoor.renderSteps === "function"
+    ) {
       window.MaristIndoor.renderSteps(state.route);
     }
   }
 
   function indoorSnapshot() {
-    if (window.MaristIndoor && typeof window.MaristIndoor.snapshot === 'function') {
+    if (
+      window.MaristIndoor &&
+      typeof window.MaristIndoor.snapshot === "function"
+    ) {
       return window.MaristIndoor.snapshot();
     }
     return { from: null, to: null, preferElevator: false };
@@ -611,22 +642,27 @@
     const params = new URLSearchParams();
 
     if (indoor.from) {
-      appendIndoorParams(params, 'from', indoor.from.endpoint, indoor.from.label);
+      appendIndoorParams(
+        params,
+        "from",
+        indoor.from.endpoint,
+        indoor.from.label,
+      );
     } else if (state.from) {
-      params.set('from_lon', state.from.lon);
-      params.set('from_lat', state.from.lat);
-      if (state.from.label) params.set('from_label', state.from.label);
+      params.set("from_lon", state.from.lon);
+      params.set("from_lat", state.from.lat);
+      if (state.from.label) params.set("from_label", state.from.label);
     }
 
     if (indoor.to) {
-      appendIndoorParams(params, 'to', indoor.to.endpoint, indoor.to.label);
+      appendIndoorParams(params, "to", indoor.to.endpoint, indoor.to.label);
     } else if (state.to) {
-      params.set('to_lon', state.to.lon);
-      params.set('to_lat', state.to.lat);
-      if (state.to.label) params.set('to_label', state.to.label);
+      params.set("to_lon", state.to.lon);
+      params.set("to_lat", state.to.lat);
+      if (state.to.label) params.set("to_label", state.to.label);
     }
 
-    if (indoor.preferElevator) params.set('prefer_elevator', '1');
+    if (indoor.preferElevator) params.set("prefer_elevator", "1");
     return params;
   }
 
@@ -634,17 +670,17 @@
     if (!haveEnoughEndpoints()) {
       state.route = null;
       renderMap();
-      emitChange({ status: 'idle' });
+      emitChange({ status: "idle" });
       return;
     }
     if (state.inflight) state.inflight.abort();
     const ctrl = new AbortController();
     state.inflight = ctrl;
-    emitChange({ status: 'loading' });
+    emitChange({ status: "loading" });
     try {
       const params = buildRouteParams();
       const res = await fetch(`/api/route?${params.toString()}`, {
-        headers: { Accept: 'application/json' },
+        headers: { Accept: "application/json" },
         signal: ctrl.signal,
       });
       if (!res.ok) {
@@ -652,19 +688,21 @@
         try {
           const body = await res.json();
           if (body && body.description) msg = body.description;
-        } catch (_ignored) { /* not json */ }
+        } catch (_ignored) {
+          /* not json */
+        }
         throw new Error(msg);
       }
       state.route = await res.json();
       renderMap();
       fitRoute();
-      emitChange({ status: 'ready' });
+      emitChange({ status: "ready" });
     } catch (err) {
-      if (err.name === 'AbortError') return;
-      console.warn('[routing]', err);
+      if (err.name === "AbortError") return;
+      console.warn("[routing]", err);
       state.route = null;
       renderMap();
-      emitChange({ status: 'error', error: err.message || String(err) });
+      emitChange({ status: "error", error: err.message || String(err) });
     } finally {
       if (state.inflight === ctrl) state.inflight = null;
     }
@@ -672,15 +710,20 @@
 
   function normalizePoint(pt) {
     if (!pt) return null;
-    const lon = Number(pt.lon), lat = Number(pt.lat);
+    const lon = Number(pt.lon),
+      lat = Number(pt.lat);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
     return { lon, lat, label: pt.label || null };
   }
 
   function currentGpsPoint() {
-    const geo = window.MaristGeo && window.MaristGeo.getLast && window.MaristGeo.getLast();
-    if (!geo || !Number.isFinite(geo.lon) || !Number.isFinite(geo.lat)) return null;
-    return { lon: geo.lon, lat: geo.lat, label: 'Your location' };
+    const geo =
+      window.MaristGeo &&
+      window.MaristGeo.getLast &&
+      window.MaristGeo.getLast();
+    if (!geo || !Number.isFinite(geo.lon) || !Number.isFinite(geo.lat))
+      return null;
+    return { lon: geo.lon, lat: geo.lat, label: "Your location" };
   }
 
   const api = {
@@ -716,7 +759,10 @@
       const indoor = indoorSnapshot();
       if (!state.from && !state.to && !indoor.from && !indoor.to) return;
       [state.from, state.to] = [state.to, state.from];
-      if (window.MaristIndoor && typeof window.MaristIndoor.swap === 'function') {
+      if (
+        window.MaristIndoor &&
+        typeof window.MaristIndoor.swap === "function"
+      ) {
         window.MaristIndoor.swap();
       } else {
         recomputeRoute();
@@ -729,11 +775,11 @@
       state.route = null;
       if (state.inflight) state.inflight.abort();
       if (window.MaristIndoor) {
-        window.MaristIndoor.setSide('from', null);
-        window.MaristIndoor.setSide('to', null);
+        window.MaristIndoor.setSide("from", null);
+        window.MaristIndoor.setSide("to", null);
       }
       renderMap();
-      emitChange({ status: 'idle' });
+      emitChange({ status: "idle" });
     },
     exportGpx() {
       if (!haveEnoughEndpoints()) return;
@@ -772,7 +818,7 @@
       }
       renderMap();
       fitRoute();
-      emitChange({ status: 'ready' });
+      emitChange({ status: "ready" });
     },
     /** Called by map.js whenever the pitch crosses the 3D threshold. */
     set3dMode(in3d) {
@@ -792,13 +838,12 @@
 
   window.MaristRoute = api;
 
-  document.addEventListener('mmap:indoor-changed', () => recomputeRoute());
+  document.addEventListener("mmap:indoor-changed", () => recomputeRoute());
 
-  // ---- right-click context menu ---------------------------------------
-  const menu = document.createElement('div');
-  menu.className = 'map-context-menu';
+  const menu = document.createElement("div");
+  menu.className = "map-context-menu";
   menu.hidden = true;
-  menu.setAttribute('role', 'menu');
+  menu.setAttribute("role", "menu");
   menu.innerHTML = `
     <button type="button" role="menuitem" data-action="set-from">Directions from here</button>
     <button type="button" role="menuitem" data-action="set-to">Directions to here</button>
@@ -819,34 +864,35 @@
     const margin = 4;
     const { innerWidth, innerHeight } = window;
     const rect = menu.getBoundingClientRect();
-    let x = clientX + margin, y = clientY + margin;
+    let x = clientX + margin,
+      y = clientY + margin;
     if (x + rect.width > innerWidth) x = clientX - rect.width - margin;
     if (y + rect.height > innerHeight) y = clientY - rect.height - margin;
     menu.style.left = `${Math.max(4, x)}px`;
     menu.style.top = `${Math.max(4, y)}px`;
   }
 
-  menu.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-action]');
+  menu.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action]");
     if (!btn || !menuAt) return;
     const pt = { lon: menuAt.lon, lat: menuAt.lat, label: menuAt.label };
-    if (btn.dataset.action === 'set-from') api.setStart(pt);
-    else if (btn.dataset.action === 'set-to') api.setEnd(pt);
+    if (btn.dataset.action === "set-from") api.setStart(pt);
+    else if (btn.dataset.action === "set-to") api.setEnd(pt);
     hideMenu();
   });
 
-  document.addEventListener('click', (e) => {
+  document.addEventListener("click", (e) => {
     if (!menu.contains(e.target)) hideMenu();
   });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideMenu();
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideMenu();
   });
-  window.addEventListener('resize', hideMenu);
-  window.addEventListener('scroll', hideMenu, true);
+  window.addEventListener("resize", hideMenu);
+  window.addEventListener("scroll", hideMenu, true);
 
   const mmap = window.MaristMap;
   if (!mmap || !mmap.ready) {
-    console.warn('[routing] MaristMap not found; routing disabled');
+    console.warn("[routing] MaristMap not found; routing disabled");
     return;
   }
 
@@ -855,20 +901,30 @@
     ensureLayers(map);
     renderMap();
 
-    map.on('contextmenu', (e) => {
+    map.on("contextmenu", (e) => {
       e.preventDefault();
       let label = null;
       try {
-        const hits = map.queryRenderedFeatures(e.point, { layers: ['buildings'] });
+        const hits = map.queryRenderedFeatures(e.point, {
+          layers: ["buildings"],
+        });
         if (hits && hits.length) {
           const p = hits[0].properties || {};
-          label = p.name || p['addr:housename'] || p['addr:housenumber'] || null;
+          label =
+            p.name || p["addr:housename"] || p["addr:housenumber"] || null;
         }
-      } catch (_ignored) { /* layer may not exist yet */ }
-      showMenu(e.originalEvent.clientX, e.originalEvent.clientY, e.lngLat, label);
+      } catch (_ignored) {
+        /* layer may not exist yet */
+      }
+      showMenu(
+        e.originalEvent.clientX,
+        e.originalEvent.clientY,
+        e.lngLat,
+        label,
+      );
     });
-    map.on('movestart', hideMenu);
-    map.on('zoomstart', hideMenu);
-    map.on('click', hideMenu);
+    map.on("movestart", hideMenu);
+    map.on("zoomstart", hideMenu);
+    map.on("click", hideMenu);
   });
 })();

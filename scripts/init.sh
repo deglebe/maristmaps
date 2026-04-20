@@ -64,7 +64,7 @@ docker compose version >/dev/null 2>&1 || die "docker compose plugin is required
 
 compose_files() {
     if [ "$MODE" = "prod" ]; then
-        echo "-f docker-compose.yml -f docker-compose.prod.yml"
+        echo "-f docker-compose.yml -f deploy/docker-compose.prod.yml"
     else
         echo "-f docker-compose.yml"
     fi
@@ -165,7 +165,7 @@ if curl -fsS -o /dev/null --max-time 10 "https://${DOMAIN}/" 2>/dev/null; then
     log "https://${DOMAIN}/ responded OK"
 else
     log "https://${DOMAIN}/ not reachable yet (DNS still propagating, or cert issuance in progress)."
-    log "  Watch:  docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f caddy"
+    log "  Watch:  docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml logs -f caddy"
 fi
 
 cat <<EOF
@@ -174,7 +174,7 @@ cat <<EOF
 
   URL:    https://${DOMAIN}
   Tiles:  https://${DOMAIN}/tiles/catalog
-  Logs:   docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f web caddy
+  Logs:   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml logs -f web caddy
   Stop:   scripts/init.sh --prod --down
 
 EOF

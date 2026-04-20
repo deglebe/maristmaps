@@ -12,8 +12,8 @@
 # behind a host-run `python run.py`). The full stack comes up via
 # `docker compose --profile app up -d` or `scripts/init.sh --prod`.
 #
-# Production adds Caddy on top via docker-compose.prod.yml; see
-# deploy.md for the full walkthrough.
+# Production adds Caddy on top via deploy/docker-compose.prod.yml; see
+# deploy/deploy.md for the full walkthrough.
 
 services:
   db:

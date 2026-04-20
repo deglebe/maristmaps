@@ -2,13 +2,29 @@ import json
 import os
 import re
 
-from flask import Blueprint, Response, abort, current_app, jsonify, render_template, request, send_from_directory, session
+from flask import (
+    Blueprint,
+    Response,
+    abort,
+    current_app,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+)
 from langchain_core.messages import SystemMessage, message_to_dict, messages_from_dict
-from openai import BadRequestError
+from openai import (
+    APIConnectionError,
+    AuthenticationError,
+    BadRequestError,
+    OpenAIError,
+    RateLimitError,
+)
 
 from agent.logutil import get_logger, trunc_preview
 from agent.service import looks_like_question, run_agent_turn_b64, speech_to_text
-from app import routing, trip, building_bridges
+from app import building_bridges, routing, trip
 from app.locations import (
     find_entrance,
     find_room,
@@ -29,6 +45,42 @@ from app.osm_features import (
 bp = Blueprint("main", __name__)
 agent_http_log = get_logger("http")
 
+
+def _openai_err_log_fields(err: Exception) -> dict:
+    """Safe fields for logs (no secrets)."""
+    out: dict = {"exc_type": type(err).__name__}
+    for attr in (
+        "status_code",
+        "code",
+        "param",
+        "type",
+        "request_id",
+    ):
+        v = getattr(err, attr, None)
+        if v is not None:
+            out[attr] = v
+    msg = getattr(err, "message", None) or str(err)
+    if msg:
+        out["message"] = trunc_preview(str(msg), 800)
+    body = getattr(err, "body", None)
+    if body is not None:
+        out["body"] = trunc_preview(str(body), 1200)
+    resp = getattr(err, "response", None)
+    if resp is not None:
+        sc = getattr(resp, "status_code", None)
+        if sc is not None:
+            out["http_status"] = sc
+    return out
+
+
+def _log_missing_openai_key(route: str) -> None:
+    agent_http_log.warning(
+        "agent %s: OPENAI_API_KEY is not set in process environment "
+        "(export it or use .env with load_dotenv in run.py)",
+        route,
+    )
+
+
 # LangChain agent conversation (signed cookie session; kept small).
 _AGENT_SESSION_KEY = "agent_lc_messages_v1"
 _AGENT_MAX_MESSAGES = 24
@@ -40,7 +92,9 @@ def _prune_agent_message_dicts(ser: list) -> list:
     out = list(ser)
     while len(out) > _AGENT_MAX_MESSAGES:
         out.pop(0)
-    while len(json.dumps(out).encode("utf-8")) > _AGENT_MAX_COOKIE_BYTES and len(out) > 4:
+    while (
+        len(json.dumps(out).encode("utf-8")) > _AGENT_MAX_COOKIE_BYTES and len(out) > 4
+    ):
         out = out[4:]
     return out
 
@@ -89,7 +143,7 @@ def favicon():
     this at the site root regardless of what the <link rel="icon">
     tags say, so give them a real file instead of a 404."""
     return send_from_directory(
-        current_app.static_folder,
+        current_app.static_folder or "",
         "favicon.ico",
         mimetype="image/vnd.microsoft.icon",
     )
@@ -160,10 +214,12 @@ def api_indoor_index():
           "endpoint": { ... }             # opaque payload for /api/route
         }
     """
-    return jsonify({
-        "targets": list_targets(),
-        "buildings": list_buildings(),
-    })
+    return jsonify(
+        {
+            "targets": list_targets(),
+            "buildings": list_buildings(),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +314,9 @@ def _compute_trip_from_request() -> dict:
     locations = load_locations()
     try:
         return trip.plan_trip(
-            start, end, locations,
+            start,
+            end,
+            locations,
             prefer_elevator=_prefer_elevator_flag(),
         )
     except trip.TripError as err:
@@ -323,7 +381,9 @@ def api_route_debug():
     stats["locations_total"] = len(locs)
     stats["locations_by_kind"] = {}
     for e in locs:
-        stats["locations_by_kind"][e.kind] = stats["locations_by_kind"].get(e.kind, 0) + 1
+        stats["locations_by_kind"][e.kind] = (
+            stats["locations_by_kind"].get(e.kind, 0) + 1
+        )
     return jsonify(stats)
 
 
@@ -340,19 +400,64 @@ def api_route_rebuild():
 def api_agent_transcribe():
     """Speech-to-text (Whisper). Expects multipart field ``audio``."""
     if not os.environ.get("OPENAI_API_KEY"):
+        _log_missing_openai_key("POST /api/agent/transcribe")
         abort(503, description="OPENAI_API_KEY is not configured")
     f = request.files.get("audio")
     if f is None or f.filename == "":
+        agent_http_log.warning(
+            "POST /api/agent/transcribe: missing multipart field audio"
+        )
         abort(400, description="missing audio file")
     raw = f.read()
     if not raw:
+        agent_http_log.warning(
+            "POST /api/agent/transcribe: empty upload filename=%s", f.filename
+        )
         abort(400, description="empty audio upload")
     agent_http_log.info(
-        "POST /api/agent/transcribe bytes=%s filename=%s",
+        "POST /api/agent/transcribe bytes=%s filename=%s mimetype=%s",
         len(raw),
         f.filename,
+        f.mimetype,
     )
-    text = speech_to_text(raw, f.filename or "audio.webm", f.mimetype)
+    text = ""
+    try:
+        text = speech_to_text(raw, f.filename or "audio.webm", f.mimetype)
+    except AuthenticationError as err:
+        agent_http_log.error(
+            "POST /api/agent/transcribe: OpenAI auth failed %s",
+            _openai_err_log_fields(err),
+        )
+        abort(502, description="OpenAI authentication failed (check OPENAI_API_KEY)")
+    except RateLimitError as err:
+        agent_http_log.error(
+            "POST /api/agent/transcribe: OpenAI rate limit %s",
+            _openai_err_log_fields(err),
+        )
+        abort(429, description="OpenAI rate limited; try again shortly")
+    except APIConnectionError as err:
+        agent_http_log.error(
+            "POST /api/agent/transcribe: OpenAI connection error %s",
+            _openai_err_log_fields(err),
+        )
+        abort(502, description="Could not reach OpenAI (network)")
+    except OpenAIError as err:
+        agent_http_log.error(
+            "POST /api/agent/transcribe: OpenAI error %s",
+            _openai_err_log_fields(err),
+        )
+        abort(502, description="Speech-to-text request failed (see server logs)")
+    except OSError as err:
+        agent_http_log.exception(
+            "POST /api/agent/transcribe: I/O error reading audio: %s", err
+        )
+        abort(500, description="Could not process audio upload")
+    except Exception as err:
+        agent_http_log.exception(
+            "POST /api/agent/transcribe: unexpected error type=%s",
+            type(err).__name__,
+        )
+        abort(500, description="Speech-to-text failed unexpectedly (see server logs)")
     agent_http_log.info("POST /api/agent/transcribe done text_len=%s", len(text))
     return jsonify({"text": text})
 
@@ -371,9 +476,14 @@ def api_agent():
       ``reopen_mic`` is false so the voice loop terminates.
     """
     if not os.environ.get("OPENAI_API_KEY"):
+        _log_missing_openai_key("POST /api/agent")
         abort(503, description="OPENAI_API_KEY is not configured")
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
+        agent_http_log.warning(
+            "POST /api/agent: invalid JSON content_type=%r",
+            request.content_type,
+        )
         abort(400, description="expected JSON object")
 
     if data.get("reset"):
@@ -382,6 +492,7 @@ def api_agent():
 
     message = (data.get("message") or "").strip()
     if not message:
+        agent_http_log.warning("POST /api/agent: empty or missing message")
         abort(400, description="message is required")
 
     from_label = data.get("from_label")
@@ -400,7 +511,7 @@ def api_agent():
     )
 
     try:
-        reply, plan, audio_b64, outbound = run_agent_turn_b64(
+        turn = run_agent_turn_b64(
             message,
             history=history,
             from_lon=from_lon,
@@ -410,7 +521,7 @@ def api_agent():
     except BadRequestError as err:
         agent_http_log.warning(
             "POST /api/agent OpenAI BadRequestError (session cleared): %s",
-            err,
+            _openai_err_log_fields(err),
         )
         session.pop(_AGENT_SESSION_KEY, None)
         session.modified = True
@@ -418,50 +529,93 @@ def api_agent():
             502,
             description="Chat session was reset (invalid history). Retry your message.",
         )
+    except AuthenticationError as err:
+        agent_http_log.error(
+            "POST /api/agent OpenAI authentication failed: %s",
+            _openai_err_log_fields(err),
+        )
+        abort(502, description="OpenAI authentication failed (check OPENAI_API_KEY)")
+    except RateLimitError as err:
+        agent_http_log.error(
+            "POST /api/agent OpenAI rate limited: %s",
+            _openai_err_log_fields(err),
+        )
+        abort(429, description="OpenAI rate limited; try again shortly")
+    except APIConnectionError as err:
+        agent_http_log.error(
+            "POST /api/agent OpenAI connection error: %s",
+            _openai_err_log_fields(err),
+        )
+        abort(502, description="Could not reach OpenAI (network)")
+    except OpenAIError as err:
+        agent_http_log.error(
+            "POST /api/agent OpenAI error: %s",
+            _openai_err_log_fields(err),
+        )
+        abort(502, description="Agent request failed (see server logs)")
     except RuntimeError as err:
-        agent_http_log.exception("POST /api/agent RuntimeError: %s", err)
+        agent_http_log.exception(
+            "POST /api/agent RuntimeError: %s",
+            err,
+        )
         abort(503, description=str(err))
-
-    try:
-        _save_agent_session_messages(outbound)
-    except Exception:
-        session.pop(_AGENT_SESSION_KEY, None)
-        session.modified = True
-
-    # A turn only "needs clarification" when the assistant actually asked a
-    # question. If the model produced a plan we're done; if it produced
-    # filler ("sure, planning that for you") with no plan and no question we
-    # do NOT reopen the mic — that would loop the user into nonsense voice
-    # rounds.
-    if plan is not None:
-        needs_clarification = False
-        response_code = "ROUTE_READY"
-    elif looks_like_question(reply):
-        needs_clarification = True
-        response_code = "CLARIFICATION_PENDING"
+    except Exception as err:
+        agent_http_log.exception(
+            "POST /api/agent unexpected error type=%s",
+            type(err).__name__,
+        )
+        abort(500, description="Agent failed unexpectedly (see server logs)")
     else:
-        needs_clarification = False
-        response_code = "NO_ACTION"
-    response_code_numeric = 0 if response_code == "NO_ACTION" else (
-        2 if response_code == "ROUTE_READY" else 1
-    )
+        reply, plan, audio_b64, outbound = turn
 
-    agent_http_log.info(
-        "POST /api/agent response response_code=%s navigated=%s reopen_mic=%s reply_preview=%r audio_b64_len=%s",
-        response_code,
-        plan is not None,
-        needs_clarification,
-        trunc_preview(reply, 600),
-        len(audio_b64) if audio_b64 else 0,
-    )
+        try:
+            _save_agent_session_messages(outbound)
+        except Exception as save_err:
+            agent_http_log.exception(
+                "POST /api/agent failed to persist session (cookie too large or corrupt?): %s",
+                save_err,
+            )
+            session.pop(_AGENT_SESSION_KEY, None)
+            session.modified = True
 
-    return jsonify({
-        "reply": reply,
-        "navigated": plan is not None,
-        "route": plan,
-        "audio_base64": audio_b64,
-        "audio_mime": "audio/mpeg" if audio_b64 else None,
-        "response_code": response_code,
-        "response_code_numeric": response_code_numeric,
-        "reopen_mic": needs_clarification,
-    })
+        # A turn only "needs clarification" when the assistant actually asked a
+        # question. If the model produced a plan we're done; if it produced
+        # filler ("sure, planning that for you") with no plan and no question we
+        # do NOT reopen the mic — that would loop the user into nonsense voice
+        # rounds.
+        if plan is not None:
+            needs_clarification = False
+            response_code = "ROUTE_READY"
+        elif looks_like_question(reply):
+            needs_clarification = True
+            response_code = "CLARIFICATION_PENDING"
+        else:
+            needs_clarification = False
+            response_code = "NO_ACTION"
+        response_code_numeric = (
+            0
+            if response_code == "NO_ACTION"
+            else (2 if response_code == "ROUTE_READY" else 1)
+        )
+
+        agent_http_log.info(
+            "POST /api/agent response response_code=%s navigated=%s reopen_mic=%s reply_preview=%r audio_b64_len=%s",
+            response_code,
+            plan is not None,
+            needs_clarification,
+            trunc_preview(reply, 600),
+            len(audio_b64) if audio_b64 else 0,
+        )
+
+        return jsonify(
+            {
+                "reply": reply,
+                "navigated": plan is not None,
+                "route": plan,
+                "audio_base64": audio_b64,
+                "audio_mime": "audio/mpeg" if audio_b64 else None,
+                "response_code": response_code,
+                "response_code_numeric": response_code_numeric,
+                "reopen_mic": needs_clarification,
+            }
+        )
