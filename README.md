@@ -8,6 +8,11 @@ LangChain-powered agent for conversational routing on top.
 
 **Best Overall Project** — Marist Hackathon, Spring 2026.
 
+## Demo
+<div align="center">
+    <img src="https://github.com/deglebe/maristmaps/blob/main/presentation/demo.gif" alt="Demo Video" width="750">
+</div>
+
 ## Problem statement
 
 The current Marist campus map only shows you where buildings are and google maps is unable to provde specific
