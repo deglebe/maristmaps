@@ -1,0 +1,50 @@
+# Production overlay: adds Caddy in front of web + martin for
+# automatic HTTPS via Let's Encrypt.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml \
+#       --profile app up -d --build
+#
+# Or let scripts/init.sh --prod do it for you.
+#
+# Required in .env:
+#   DOMAIN       e.g. maps.example.com  (A record points at this host)
+#   ACME_EMAIL   email for Let's Encrypt registration + expiry notices
+#   SECRET_KEY   flask session signing key (generate: `openssl rand -hex 32`)
+#   OPENAI_API_KEY
+#
+# Recommended in .env for prod:
+#   MARTIN_PUBLIC_URL=https://${DOMAIN}/tiles
+#   POSTGRES_PASSWORD=<strong random>
+#   GUNICORN_WORKERS=2  (raise on bigger VPS)
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      martin:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set for TLS (e.g. maps.example.com)}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set so Let's Encrypt can notify expiries}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  caddy_data:
+  caddy_config:

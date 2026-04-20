@@ -41,8 +41,8 @@
   const LINE_WIDTH_PX = 6;
   const LINE_COLOR = 0x1a73e8;
   const ENDPOINT_START_COLOR = 0x34a853; // green
-  const ENDPOINT_END_COLOR = 0xea4335;   // red
-  const ENDPOINT_RADIUS_PX = 9;          // rough screen-space target
+  const ENDPOINT_END_COLOR = 0xea4335; // red
+  const ENDPOINT_RADIUS_PX = 9; // rough screen-space target
 
   let _map = null;
   let _gl = null;
@@ -54,17 +54,17 @@
   // Per-route resources. We dispose these on clear().
   let _lineObjects = [];
   let _endpointSpheres = [];
-  let _pendingRoute = null;      // route data waiting for layer onAdd
+  let _pendingRoute = null; // route data waiting for layer onAdd
   let _visible = true;
 
   // Whether THREE.Line2 / LineGeometry / LineMaterial are available.
   // We look them up lazily at first use because the CDN scripts load
   // after this file on some pages.
   function _lineClasses() {
-    if (typeof THREE === 'undefined') return null;
-    const G = THREE.LineGeometry || (window.LineGeometry);
-    const M = THREE.LineMaterial || (window.LineMaterial);
-    const L2 = THREE.Line2 || (window.Line2);
+    if (typeof THREE === "undefined") return null;
+    const G = THREE.LineGeometry || window.LineGeometry;
+    const M = THREE.LineMaterial || window.LineMaterial;
+    const L2 = THREE.Line2 || window.Line2;
     if (!G || !M || !L2) return null;
     return { LineGeometry: G, LineMaterial: M, Line2: L2 };
   }
@@ -83,7 +83,9 @@
     if (coords3d.length < 2) return null;
     const cls = _lineClasses();
     if (!cls) {
-      console.warn('[route3d] THREE.Line2 classes unavailable — check CDN script tags');
+      console.warn(
+        "[route3d] THREE.Line2 classes unavailable — check CDN script tags",
+      );
       return null;
     }
     const positions = [];
@@ -99,9 +101,9 @@
       linewidth: LINE_WIDTH_PX,
       // Line2's LineMaterial needs screen dims to compute pixel width.
       resolution: new THREE.Vector2(_resolution.w, _resolution.h),
-      worldUnits: false,    // pixel-width, not world-unit
+      worldUnits: false, // pixel-width, not world-unit
       transparent: false,
-      depthTest: false,     // draw over extruded buildings
+      depthTest: false, // draw over extruded buildings
     });
 
     const line = new cls.Line2(geom, mat);
@@ -115,7 +117,7 @@
   // like an 8-9px circle at typical zooms (17-18). We don't dynamically
   // rescale with camera distance for v1.
   function _addEndpointSphere(lonLatZ, color) {
-    if (typeof THREE === 'undefined') return;
+    if (typeof THREE === "undefined") return;
     // We size the sphere in meters, picked so it reads as a modest dot
     // on the route at building-scale zooms. 1.2 m radius lines up with
     // the existing 7 px circle radius fairly well at z=18.
@@ -132,7 +134,8 @@
     // "meter" radius needs to be scaled by meterInMercatorCoordinateUnits
     // at the sphere's latitude so geometry size matches the positioning.
     const m = maplibregl.MercatorCoordinate.fromLngLat(
-      [lonLatZ[0], lonLatZ[1]], lonLatZ[2]
+      [lonLatZ[0], lonLatZ[1]],
+      lonLatZ[2],
     );
     const scale = m.meterInMercatorCoordinateUnits();
     mesh.position.set(m.x, m.y, m.z);
@@ -146,13 +149,13 @@
   function _applyPendingRoute() {
     if (!_pendingRoute || !_scene) return;
     _clearSceneObjects();
-    for (const seg of (_pendingRoute.segments || [])) {
+    for (const seg of _pendingRoute.segments || []) {
       if (!seg || !Array.isArray(seg.coords) || seg.coords.length < 2) continue;
       _addPolyline(seg.coords);
     }
     const eps = _pendingRoute.endpoints || {};
     if (eps.start) _addEndpointSphere(eps.start, ENDPOINT_START_COLOR);
-    if (eps.end)   _addEndpointSphere(eps.end, ENDPOINT_END_COLOR);
+    if (eps.end) _addEndpointSphere(eps.end, ENDPOINT_END_COLOR);
     if (_map) _map.triggerRepaint();
   }
 
@@ -184,16 +187,17 @@
     _resolution.w = canvas.width;
     _resolution.h = canvas.height;
     for (const { mat } of _lineObjects) {
-      if (mat && mat.resolution) mat.resolution.set(_resolution.w, _resolution.h);
+      if (mat && mat.resolution)
+        mat.resolution.set(_resolution.w, _resolution.h);
     }
   }
 
   // MapLibre CustomLayerInterface object. We implement render/onAdd/onRemove;
   // everything else is optional.
   const customLayer = {
-    id: 'mm-route-3d',
-    type: 'custom',
-    renderingMode: '3d',
+    id: "mm-route-3d",
+    type: "custom",
+    renderingMode: "3d",
 
     onAdd(map, gl) {
       _map = map;
@@ -216,14 +220,14 @@
       _updateResolution();
       // Track canvas size changes. MapLibre fires 'resize' on its own
       // resize events; our _updateResolution reads the canvas either way.
-      map.on('resize', _updateResolution);
+      map.on("resize", _updateResolution);
 
       if (_pendingRoute) _applyPendingRoute();
     },
 
     onRemove() {
       _clearSceneObjects();
-      if (_map && _map.off) _map.off('resize', _updateResolution);
+      if (_map && _map.off) _map.off("resize", _updateResolution);
       _scene = null;
       _camera = null;
       // Don't dispose _renderer — disposing it can take down the shared gl
@@ -253,8 +257,6 @@
     },
   };
 
-  // ---- public API ------------------------------------------------------
-
   const api = {
     /** Install a new route. `routeSpec` is the altitude-tagged structure
      *  produced by routing.js's Z-assignment pass. */
@@ -274,13 +276,13 @@
     /** Attach to a MapLibre map. Safe to call before or after map load. */
     attach(map) {
       const addWhenReady = () => {
-        if (map.getLayer('mm-route-3d')) return;
+        if (map.getLayer("mm-route-3d")) return;
         map.addLayer(customLayer);
       };
       if (map.isStyleLoaded && map.isStyleLoaded()) {
         addWhenReady();
       } else {
-        map.once('load', addWhenReady);
+        map.once("load", addWhenReady);
       }
     },
   };
