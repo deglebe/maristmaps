@@ -121,13 +121,24 @@ def _save_agent_session_messages(msgs: list) -> None:
 
 def _map_page_config():
     base = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:3000").rstrip("/")
+    raw_bbox = (os.environ.get("MAP_RENDER_BBOX") or "").strip()
+    bbox = None
+    if raw_bbox:
+        try:
+            west, south, east, north = [float(x.strip()) for x in raw_bbox.split(",")]
+            if west < east and south < north:
+                bbox = [west, south, east, north]
+        except (TypeError, ValueError):
+            bbox = None
     return {
         "martinBase": base,
         "center": [
-            float(os.environ.get("MAP_CENTER_LON", "-73.93446921913481")),
-            float(os.environ.get("MAP_CENTER_LAT", "41.72233476143977")),
+            float(os.environ.get("MAP_CENTER_LON", "-73.90665154393827")),
+            float(os.environ.get("MAP_CENTER_LAT", "41.69664534616691")),
         ],
-        "zoom": float(os.environ.get("MAP_ZOOM", "16.5")),
+        "zoom": float(os.environ.get("MAP_ZOOM", "12.6")),
+        "featureRadiusM": float(os.environ.get("MAP_FEATURE_RADIUS_M", "6000")),
+        "bounds": bbox,
         "buildingNameOverrides": building_name_overrides(),
     }
 

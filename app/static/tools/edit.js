@@ -7,8 +7,8 @@
 const CFG = (function () {
   const defaults = {
     martinUrl: 'http://127.0.0.1:3000',
-    center: [-73.93446921913481, 41.72233476143977],
-    zoom: 16.5,
+    center: [-73.90665154393827, 41.69664534616691],
+    zoom: 12.6,
   };
   const el = document.getElementById('map-config');
   if (!el) return defaults;

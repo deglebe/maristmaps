@@ -29,7 +29,7 @@ var titleEl = document.getElementById("hdr-title");
 var CFG = (function () {
   var defaults = {
     martinBase: "http://127.0.0.1:3000",
-    center: [-73.93446921913481, 41.72233476143977],
+    center: [-73.90665154393827, 41.69664534616691],
     zoom: 18,
   };
   var el = document.getElementById("geolog-config");

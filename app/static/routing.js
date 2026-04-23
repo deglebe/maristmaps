@@ -619,6 +619,19 @@
     return { from: null, to: null, preferElevator: false };
   }
 
+  // External endpoint setters (map popup/right-click menu) are intended to
+  // override whichever side the user picks. The route param builder prefers
+  // MaristIndoor endpoints when present, so clear that side first to avoid the
+  // new outdoor point being ignored.
+  function clearIndoorSide(side) {
+    if (
+      window.MaristIndoor &&
+      typeof window.MaristIndoor.setSide === "function"
+    ) {
+      window.MaristIndoor.setSide(side, null);
+    }
+  }
+
   function haveEnoughEndpoints() {
     const indoor = indoorSnapshot();
     return !!(state.from || indoor.from) && !!(state.to || indoor.to);
@@ -728,11 +741,13 @@
 
   const api = {
     setStart(pt) {
+      clearIndoorSide("from");
       state.from = normalizePoint(pt);
       renderMap();
       recomputeRoute();
     },
     setEnd(pt) {
+      clearIndoorSide("to");
       state.to = normalizePoint(pt);
       // Default the start to live GPS so picking only a destination
       // (e.g. via the search popup's "Directions to here") plans a

@@ -287,7 +287,6 @@
           "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 18, 11],
         },
       },
-
       {
         id: "buildings",
         type: "fill",
@@ -443,13 +442,42 @@
     ],
   };
 
-  // Campus is only ~1 km across, so clamp both the zoom range and the
-  // pannable area. Without this you can zoom out until the data is a dot or
-  // pan across the Hudson into blank territory the PBF doesn't cover.
-  const CAMPUS_BOUNDS = [
-    [cfg.center[0] - 0.014, cfg.center[1] - 0.01], // SW  (~1.15 km W, ~1.10 km S)
-    [cfg.center[0] + 0.014, cfg.center[1] + 0.01], // NE
-  ];
+  // Prefer explicit PBF bounds (MAP_RENDER_BBOX: west,south,east,north) so the
+  // camera lines up with the actual extract edge. Fall back to radius-derived
+  // bounds when bbox is not configured.
+  let maxBounds;
+  if (Array.isArray(cfg.bounds) && cfg.bounds.length === 4) {
+    const [west, south, east, north] = cfg.bounds.map(Number);
+    if (
+      Number.isFinite(west) &&
+      Number.isFinite(south) &&
+      Number.isFinite(east) &&
+      Number.isFinite(north) &&
+      west < east &&
+      south < north
+    ) {
+      const padLon = (east - west) * 0.08;
+      const padLat = (north - south) * 0.08;
+      maxBounds = [
+        [west - padLon, south - padLat],
+        [east + padLon, north + padLat],
+      ];
+    }
+  }
+  if (!maxBounds) {
+    const radiusM = Number(cfg.featureRadiusM);
+    if (Number.isFinite(radiusM) && radiusM > 0) {
+      const paddedRadiusM = radiusM * 1.4;
+      const lat = cfg.center[1];
+      const latDeg = paddedRadiusM / 111320;
+      const cosLat = Math.max(0.15, Math.cos((lat * Math.PI) / 180));
+      const lonDeg = paddedRadiusM / (111320 * cosLat);
+      maxBounds = [
+        [cfg.center[0] - lonDeg, cfg.center[1] - latDeg],
+        [cfg.center[0] + lonDeg, cfg.center[1] + latDeg],
+      ];
+    }
+  }
 
   const map = new maplibregl.Map({
     container: "map",
@@ -458,10 +486,10 @@
     style,
     center: cfg.center,
     zoom: cfg.zoom,
-    minZoom: 14,
-    maxZoom: 20,
+    minZoom: 8,
+    maxZoom: 21,
     maxPitch: 75,
-    maxBounds: CAMPUS_BOUNDS,
+    maxBounds,
   });
   map.addControl(
     new maplibregl.NavigationControl({

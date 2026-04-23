@@ -31,11 +31,21 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
 
-    # Build the route graph and OSM feature caches in the background so
-    # the first /api/route and /api/features calls don't pay the cost.
-    # Under werkzeug's reloader this runs once in the parent and again
-    # in the re-exec'd child; the parent's daemon thread dies with it.
-    routing.warm_cache_async(app)
+    # Build the route graph and OSM feature caches so the first /api/route and
+    # /api/features calls don't pay the cost. Default is async; set
+    # ROUTING_WARM_SYNC=1 to block startup until the routing graph is ready.
+    if os.environ.get("ROUTING_WARM_SYNC", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        with app.app_context():
+            routing.get_graph()
+    else:
+        # Under werkzeug's reloader this runs once in the parent and again in
+        # the re-exec'd child; the parent's daemon thread dies with it.
+        routing.warm_cache_async(app)
     osm_features.warm_cache_async(app)
 
     @app.before_request

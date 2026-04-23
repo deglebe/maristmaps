@@ -5,6 +5,7 @@ trip coordinator: stitches indoor + outdoor routing into a single response.
 from __future__ import annotations
 
 import math
+import os
 import re
 from dataclasses import dataclass
 
@@ -258,23 +259,20 @@ def _haversine_m(a, b):
     return 2 * 6_371_008.8 * math.asin(math.sqrt(h))
 
 
-def _nearest_entrance(
-    building: str,
-    target_point: tuple[float, float],
-    locations: list[ir.LocationRow],
-) -> ir.LocationRow | None:
-    entrances = _entrances_of(building, locations)
-    if not entrances:
-        return None
-    return min(entrances, key=lambda e: _haversine_m((e.lon, e.lat), target_point))
-
-
 # A bare (lat, lon) that lands within this many meters of a known room or
 # entrance is treated as that anchor for routing purposes. Handles trips
 # where the frontend sent coordinates for e.g. "Hancock 2020" without a
 # room reference — so the same-building fast path below can still see that
 # both endpoints live inside Hancock and skip the outdoor loop.
 _POINT_TO_ANCHOR_THRESHOLD_M = 30.0
+
+# For building-to-building plans we can generate many entrance-pair candidates.
+# Evaluate only the closest crow-fly pairs first; this keeps latency bounded
+# while still testing the most plausible outdoor connectors.
+try:
+    _MAX_OUTDOOR_CANDIDATES = int(os.environ.get("TRIP_MAX_OUTDOOR_CANDIDATES", "24"))
+except (TypeError, ValueError):
+    _MAX_OUTDOOR_CANDIDATES = 24
 
 
 def _resolve_point_to_anchor(
@@ -475,7 +473,34 @@ def _direct_plans(
         entries = [None]
 
     plans: list[list[dict]] = []
-    for ex in exits:
+
+    # Prefilter large entrance cross-products by straight-line distance so we
+    # don't run hundreds of expensive graph routes per request.
+    # Keep all candidates when either side is a raw outdoor point (None), since
+    # that fan-out is already tiny.
+    candidate_pairs: list[tuple[ir.LocationRow | None, ir.LocationRow | None]] = []
+    if exits and entries:
+        if all(e is not None for e in exits) and all(e is not None for e in entries):
+            ranked: list[
+                tuple[float, ir.LocationRow | None, ir.LocationRow | None]
+            ] = []
+            for ex in exits:
+                for en in entries:
+                    ranked.append(
+                        (
+                            _haversine_m((ex.lon, ex.lat), (en.lon, en.lat)),
+                            ex,
+                            en,
+                        )
+                    )
+            ranked.sort(key=lambda t: t[0])
+            if _MAX_OUTDOOR_CANDIDATES > 0:
+                ranked = ranked[:_MAX_OUTDOOR_CANDIDATES]
+            candidate_pairs = [(ex, en) for _d, ex, en in ranked]
+        else:
+            candidate_pairs = [(ex, en) for ex in exits for en in entries]
+
+    for ex, en in candidate_pairs:
         leaving = _leave_building_phase(
             start, ex, locations, prefer_elevator=prefer_elevator,
         ) if ex is not None else None
@@ -485,31 +510,30 @@ def _direct_plans(
         exit_pt = _start_exit_point(start, ex)
         exit_label = _exit_label(start, ex)
 
-        for en in entries:
-            entering = _enter_building_phase(
-                end, en, locations, prefer_elevator=prefer_elevator,
-            ) if en is not None else None
-            if entering is not None and not _phase_ok(entering):
+        entering = _enter_building_phase(
+            end, en, locations, prefer_elevator=prefer_elevator,
+        ) if en is not None else None
+        if entering is not None and not _phase_ok(entering):
+            continue
+
+        entry_pt = _end_entry_point(end, en)
+        entry_label = _entry_label(end, en)
+
+        skip_outdoor = (
+            abs(exit_pt[0] - entry_pt[0]) < 1e-9
+            and abs(exit_pt[1] - entry_pt[1]) < 1e-9
+        )
+        if skip_outdoor:
+            outdoor = None
+        else:
+            outdoor = _outdoor_between(
+                exit_pt, entry_pt,
+                from_label=exit_label, to_label=entry_label,
+            )
+            if not _phase_ok(outdoor):
                 continue
 
-            entry_pt = _end_entry_point(end, en)
-            entry_label = _entry_label(end, en)
-
-            skip_outdoor = (
-                abs(exit_pt[0] - entry_pt[0]) < 1e-9
-                and abs(exit_pt[1] - entry_pt[1]) < 1e-9
-            )
-            if skip_outdoor:
-                outdoor = None
-            else:
-                outdoor = _outdoor_between(
-                    exit_pt, entry_pt,
-                    from_label=exit_label, to_label=entry_label,
-                )
-                if not _phase_ok(outdoor):
-                    continue
-
-            plans.append([p for p in (leaving, outdoor, entering) if p is not None])
+        plans.append([p for p in (leaving, outdoor, entering) if p is not None])
     return plans
 
 
